@@ -169,33 +169,16 @@ public class ImageGenerationService {
             Files.createDirectories(uploadsPath);
         }
 
-        // Keep original PNG — JPEG conversion may produce incompatible format with WeChat
+        // Keep original PNG — JPEG conversion may produce incompatible format
 
         String filename = "gen_" + UUID.randomUUID() + extension;
         Path targetPath = uploadsPath.resolve(filename);
         Files.write(targetPath, imageBytes);
         logger.info("Saved generated image to: {} ({} bytes)", targetPath.toAbsolutePath(), imageBytes.length);
-        return targetPath.toAbsolutePath().toString();
-    }
+       return targetPath.toAbsolutePath().toString();
+   }
 
-    private byte[] convertPngToJpeg(byte[] pngData) throws IOException {
-        java.io.ByteArrayInputStream bis = new java.io.ByteArrayInputStream(pngData);
-        java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(bis);
-        if (img == null) return null;
-        // Remove alpha channel: draw on white background
-        java.awt.image.BufferedImage rgbImg = new java.awt.image.BufferedImage(
-            img.getWidth(), img.getHeight(), java.awt.image.BufferedImage.TYPE_INT_RGB);
-        java.awt.Graphics2D g = rgbImg.createGraphics();
-        g.setColor(java.awt.Color.WHITE);
-        g.fillRect(0, 0, img.getWidth(), img.getHeight());
-        g.drawImage(img, 0, 0, null);
-        g.dispose();
-        java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
-        javax.imageio.ImageIO.write(rgbImg, "JPEG", bos);
-        return bos.toByteArray();
-    }
-
-    private String extractUrlFromText(String text) {
+   private String extractUrlFromText(String text) {
         if (text == null || text.isEmpty()) {
             return "";
         }

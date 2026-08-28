@@ -6,11 +6,8 @@ public class UserSession {
     private String userId;
     private String pendingImageBase64;
     private String imageDescription;
-    private boolean imageAnalyzed;
-    private String pendingFileUrl;
-    private String pendingFileName;
-    private boolean fileAnalyzed;
-    private LocalDateTime lastUpdateTime;
+   private boolean imageAnalyzed;
+   private LocalDateTime lastUpdateTime;
 
     public UserSession() {
     }
@@ -38,54 +35,15 @@ public class UserSession {
         this.pendingImageBase64 = pendingImageBase64;
     }
 
-    public String getImageDescription() {
-        return imageDescription;
-    }
+   public String getImageDescription() {
+       return imageDescription;
+   }
 
-    public void setImageDescription(String imageDescription) {
-        this.imageDescription = imageDescription;
-    }
+   public void setImageDescription(String imageDescription) {
+       this.imageDescription = imageDescription;
+   }
 
-    public String getPendingFileUrl() {
-        return pendingFileUrl;
-    }
-
-    public void setPendingFileUrl(String pendingFileUrl) {
-        this.pendingFileUrl = pendingFileUrl;
-    }
-
-    public String getPendingFileName() {
-        return pendingFileName;
-    }
-
-    public void setPendingFileName(String pendingFileName) {
-        this.pendingFileName = pendingFileName;
-    }
-
-    public boolean isFileAnalyzed() {
-        return fileAnalyzed;
-    }
-
-    public void setFileAnalyzed(boolean fileAnalyzed) {
-        this.fileAnalyzed = fileAnalyzed;
-    }
-
-    public boolean hasPendingFile() {
-        return pendingFileUrl != null && !pendingFileUrl.isEmpty();
-    }
-
-    public boolean hasUnanalyzedFile() {
-        return hasPendingFile() && !fileAnalyzed;
-    }
-
-    public void clearPendingFile() {
-        this.pendingFileUrl = null;
-        this.pendingFileName = null;
-        this.fileAnalyzed = false;
-        this.lastUpdateTime = LocalDateTime.now();
-    }
-
-    public LocalDateTime getLastUpdateTime() {
+   public LocalDateTime getLastUpdateTime() {
         return lastUpdateTime;
     }
 

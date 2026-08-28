@@ -31,11 +31,8 @@ public class UserSessionService {
         session.setUserId(entity.getUserId());
         session.setPendingImageBase64(entity.getPendingImageBase64());
         session.setImageDescription(entity.getImageDescription());
-        session.setImageAnalyzed(entity.isImageAnalyzed());
-        session.setPendingFileUrl(entity.getPendingFileUrl());
-        session.setPendingFileName(entity.getPendingFileName());
-        session.setFileAnalyzed(entity.isFileAnalyzed());
-        session.setLastUpdateTime(entity.getLastUpdateTime());
+       session.setImageAnalyzed(entity.isImageAnalyzed());
+       session.setLastUpdateTime(entity.getLastUpdateTime());
         
         logger.debug("Loaded session for user {}, hasPendingImage: {}, imageAnalyzed: {}", 
             userId, session.hasPendingImage(), session.isImageAnalyzed());
@@ -50,11 +47,8 @@ public class UserSessionService {
         
         entity.setPendingImageBase64(session.getPendingImageBase64());
         entity.setImageDescription(session.getImageDescription());
-        entity.setImageAnalyzed(session.isImageAnalyzed());
-        entity.setPendingFileUrl(session.getPendingFileUrl());
-        entity.setPendingFileName(session.getPendingFileName());
-        entity.setFileAnalyzed(session.isFileAnalyzed());
-        entity.setLastUpdateTime(session.getLastUpdateTime());
+       entity.setImageAnalyzed(session.isImageAnalyzed());
+       entity.setLastUpdateTime(session.getLastUpdateTime());
         
         sessionRepository.save(entity);
         
@@ -115,58 +109,8 @@ public class UserSessionService {
         if (session != null) {
             session.setImageAnalyzed(true);
             saveSession(session);
-            logger.info("Marked image as analyzed for user {}", userId);
-        }
-    }
+           logger.info("Marked image as analyzed for user {}", userId);
+       }
+   }
 
-    public boolean hasPendingFile(String userId) {
-        UserSession session = getSession(userId);
-        return session != null && session.hasPendingFile();
-    }
-
-    public boolean hasUnanalyzedFile(String userId) {
-        UserSession session = getSession(userId);
-        return session != null && session.hasUnanalyzedFile();
-    }
-
-    public String getPendingFileUrl(String userId) {
-        UserSession session = getSession(userId);
-        return session != null ? session.getPendingFileUrl() : null;
-    }
-
-    public String getPendingFileName(String userId) {
-        UserSession session = getSession(userId);
-        return session != null ? session.getPendingFileName() : null;
-    }
-
-    public void storePendingFile(String userId, String fileUrl, String fileName) {
-        UserSession session = getSession(userId);
-        if (session == null) {
-            session = new UserSession();
-            session.setUserId(userId);
-        }
-        session.setPendingFileUrl(fileUrl);
-        session.setPendingFileName(fileName);
-        session.setFileAnalyzed(false);
-        saveSession(session);
-        logger.info("Stored pending file for user {}, fileName: {}, fileUrl: {}", userId, fileName, fileUrl);
-    }
-
-    public void markFileAsAnalyzed(String userId) {
-        UserSession session = getSession(userId);
-        if (session != null) {
-            session.setFileAnalyzed(true);
-            saveSession(session);
-            logger.info("Marked file as analyzed for user {}", userId);
-        }
-    }
-
-    public void clearPendingFile(String userId) {
-        UserSession session = getSession(userId);
-        if (session != null) {
-            session.clearPendingFile();
-            saveSession(session);
-            logger.debug("Cleared pending file for user {}", userId);
-        }
-    }
 }

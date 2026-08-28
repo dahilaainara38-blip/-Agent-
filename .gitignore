@@ -35,6 +35,7 @@ build/
 ### Runtime data & local state (never commit) ###
 uploads/
 tmp/
+.firecrawl/
 login_state.json
 rag_knowledge.sqlite
 *.sqlite

@@ -19,20 +19,11 @@ public class UserSessionEntity {
     @Column(name = "image_description", columnDefinition = "TEXT")
     private String imageDescription;
 
-    @Column(name = "image_analyzed")
-    private boolean imageAnalyzed;
+   @Column(name = "image_analyzed")
+   private boolean imageAnalyzed;
 
-    @Column(name = "pending_file_url", length = 500)
-    private String pendingFileUrl;
-
-    @Column(name = "pending_file_name", length = 255)
-    private String pendingFileName;
-
-    @Column(name = "file_analyzed")
-    private boolean fileAnalyzed;
-
-    @Column(name = "last_update_time")
-    private LocalDateTime lastUpdateTime;
+   @Column(name = "last_update_time")
+   private LocalDateTime lastUpdateTime;
 
     public UserSessionEntity() {
     }
@@ -70,35 +61,11 @@ public class UserSessionEntity {
         return imageAnalyzed;
     }
 
-    public void setImageAnalyzed(boolean imageAnalyzed) {
-        this.imageAnalyzed = imageAnalyzed;
-    }
+   public void setImageAnalyzed(boolean imageAnalyzed) {
+       this.imageAnalyzed = imageAnalyzed;
+   }
 
-    public String getPendingFileUrl() {
-        return pendingFileUrl;
-    }
-
-    public void setPendingFileUrl(String pendingFileUrl) {
-        this.pendingFileUrl = pendingFileUrl;
-    }
-
-    public String getPendingFileName() {
-        return pendingFileName;
-    }
-
-    public void setPendingFileName(String pendingFileName) {
-        this.pendingFileName = pendingFileName;
-    }
-
-    public boolean isFileAnalyzed() {
-        return fileAnalyzed;
-    }
-
-    public void setFileAnalyzed(boolean fileAnalyzed) {
-        this.fileAnalyzed = fileAnalyzed;
-    }
-
-    public LocalDateTime getLastUpdateTime() {
+   public LocalDateTime getLastUpdateTime() {
         return lastUpdateTime;
     }
 

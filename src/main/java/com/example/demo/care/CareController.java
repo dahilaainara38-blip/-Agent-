@@ -169,7 +169,8 @@ public class CareController {
             session.setAttribute("conversationId", conversationId);
         }
 
-        logger.info("Care QA request: {}, targetType: {}, targetId: {}, conversationId: {}", question, targetType, targetId, conversationId);
+        logger.info("Care QA request: {}, targetType: {}, targetId: {}, hasImage: {}, conversationId: {}",
+                question, targetType, targetId, params.get("image") != null, conversationId);
 
         try {
             StringBuilder context = new StringBuilder();
@@ -214,6 +215,15 @@ public class CareController {
             if (context.length() > 0) {
                 systemPrompt = "以下是用户的" + ("PLANT".equalsIgnoreCase(targetType) ? "植物" : "宠物") + "档案和护理记录，请基于这些信息回答问题：\n\n" + 
                                context.toString() + "\n\n" + systemPrompt;
+            }
+
+            // 处理用户上传的图片：通过视觉服务分析后作为上下文注入
+            String imageBase64 = (String) params.get("image");
+            if (imageBase64 != null && !imageBase64.isEmpty()) {
+                byte[] imageBytes = Base64.getDecoder().decode(imageBase64);
+                String imageAnalysis = visionService.analyzeImageWithCustomPrompt(
+                        imageBytes, "请描述这张图片的内容，重点关注与植物或宠物护理相关的信息。");
+                systemPrompt = "用户上传了一张图片，以下是图片内容分析：\n" + imageAnalysis + "\n\n" + systemPrompt;
             }
 
             String reply = llmService.chatWithMemory(conversationId, question, systemPrompt);

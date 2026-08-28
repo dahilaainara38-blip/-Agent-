@@ -25,11 +25,9 @@ public class SpringAiTools {
 
     private final WeatherService weatherService;
     private final WebSearchTool webSearchTool;
-    private final TtsTool ttsTool;
     private final ImageAnalysisTool imageAnalysisTool;
     private final ImageGenerationTool imageGenerationTool;
     private final ImageEditTool imageEditTool;
-    private final FileAnalysisTool fileAnalysisTool;
     private final CareReminderService careReminderService;
     private final CareRecordService careRecordService;
     private final CareAdvancedService careAdvancedService;
@@ -42,11 +40,9 @@ public class SpringAiTools {
 
     public SpringAiTools(WeatherService weatherService,
                          WebSearchTool webSearchTool,
-                         TtsTool ttsTool,
                          ImageAnalysisTool imageAnalysisTool,
                          ImageGenerationTool imageGenerationTool,
                          ImageEditTool imageEditTool,
-                         FileAnalysisTool fileAnalysisTool,
                          CareReminderService careReminderService,
                          CareRecordService careRecordService,
                          CareAdvancedService careAdvancedService,
@@ -58,11 +54,9 @@ public class SpringAiTools {
                          UserSessionService userSessionService) {
         this.weatherService = weatherService;
         this.webSearchTool = webSearchTool;
-        this.ttsTool = ttsTool;
         this.imageAnalysisTool = imageAnalysisTool;
         this.imageGenerationTool = imageGenerationTool;
         this.imageEditTool = imageEditTool;
-        this.fileAnalysisTool = fileAnalysisTool;
         this.careReminderService = careReminderService;
         this.careRecordService = careRecordService;
         this.careAdvancedService = careAdvancedService;
@@ -115,24 +109,6 @@ public class SpringAiTools {
         } catch (Exception e) {
             log.error("[Tool] webSearch error: {}", e.getMessage(), e);
             return "搜索工具异常：" + e.getMessage();
-        }
-    }
-
-    @Tool(name = "synthesizeSpeech", description = "语音合成工具，将文本内容转换为语音文件。适用于需要朗读、播报、语音回复等场景。")
-    public String synthesizeSpeech(
-            @ToolParam(description = "需要合成为语音的文本内容", required = true) String text) {
-        log.info("[Tool] synthesizeSpeech called, text length: {}", text != null ? text.length() : 0);
-        try {
-            JSONObject params = new JSONObject();
-            params.put("text", text);
-            ToolResult<?> result = ttsTool.execute(params);
-            if (result.isSuccess()) {
-                return "[AUDIO:" + dataToString(result.getData()) + "]";
-            }
-            return "语音合成失败：" + result.getMessage();
-        } catch (Exception e) {
-            log.error("[Tool] synthesizeSpeech error: {}", e.getMessage(), e);
-            return "语音合成工具异常：" + e.getMessage();
         }
     }
 
@@ -199,28 +175,6 @@ public class SpringAiTools {
         } catch (Exception e) {
             log.error("[Tool] editImage error: {}", e.getMessage(), e);
             return "图片编辑工具异常：" + e.getMessage();
-        }
-    }
-
-    @Tool(name = "analyzeFile", description = "文档解析工具，分析用户上传的文档（PDF、Word、Excel、PPT等）内容。可以提取文本、生成摘要、分析数据等。")
-    public String analyzeFile(
-            @ToolParam(description = "分析指令，如：提取文档摘要、分析表格数据、提取关键信息", required = true) String prompt) {
-        String userId = UserContextHolder.getUserId();
-        log.info("[Tool] analyzeFile called, userId: {}, prompt: {}", userId, prompt);
-        try {
-            JSONObject params = new JSONObject();
-            params.put("prompt", prompt);
-            if (userId != null && !userId.isBlank()) {
-                params.put("userId", userId);
-            }
-            ToolResult<?> result = fileAnalysisTool.execute(params);
-            if (result.isSuccess()) {
-                return dataToString(result.getData());
-            }
-            return "文档解析失败：" + result.getMessage();
-        } catch (Exception e) {
-            log.error("[Tool] analyzeFile error: {}", e.getMessage(), e);
-            return "文档解析工具异常：" + e.getMessage();
         }
     }
 

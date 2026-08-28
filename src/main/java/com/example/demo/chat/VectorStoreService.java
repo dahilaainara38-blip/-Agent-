@@ -207,84 +207,13 @@ public class VectorStoreService {
 
         } catch (Exception e) {
             logger.error("Failed to search vector", e);
-            return List.of();
-        } finally {
-            indexLock.readLock().unlock();
-        }
-    }
+           return List.of();
+       } finally {
+           indexLock.readLock().unlock();
+       }
+   }
 
-    public List<SearchResult> searchSimilarWithMetadata(String query) {
-        return searchSimilarWithMetadata(query, null);
-    }
-
-    public List<SearchResult> searchSimilarWithMetadata(String query, String conversationId) {
-        indexLock.readLock().lock();
-        try {
-            if (!indexReady.get()) {
-                logger.warn("Vector index not ready");
-                return List.of();
-            }
-
-            float[] queryEmbedding = embeddingService.embed(query);
-            if (queryEmbedding.length == 0) {
-                logger.warn("Query embedding is empty");
-                return List.of();
-            }
-
-            List<VectorStore> allVectors;
-            if (conversationId != null && !conversationId.isEmpty()) {
-                allVectors = vectorStoreRepository.findByConversationId(conversationId);
-            } else {
-                allVectors = vectorStoreRepository.findAll();
-            }
-
-            List<SearchResult> similarityResults = new ArrayList<>();
-            for (VectorStore vs : allVectors) {
-                float[] storedVector = deserializeVector(vs.getVector());
-                if (storedVector.length != queryEmbedding.length) {
-                    continue;
-                }
-
-                double similarity = cosineSimilarity(queryEmbedding, storedVector);
-                if (similarity >= similarityThreshold) {
-                    JSONObject metadata = null;
-                    if (vs.getMetadataJson() != null && !vs.getMetadataJson().isEmpty()) {
-                        metadata = JSON.parseObject(vs.getMetadataJson());
-                    }
-                    similarityResults.add(new SearchResult(
-                        vs.getDocumentId(),
-                        vs.getSourceId(),
-                        vs.getContent(),
-                        similarity,
-                        metadata
-                    ));
-                }
-            }
-
-            similarityResults.sort((a, b) -> Double.compare(b.similarity, a.similarity));
-
-            List<SearchResult> results = new ArrayList<>();
-            int count = 0;
-            for (SearchResult sr : similarityResults) {
-                if (count >= topK) {
-                    break;
-                }
-                results.add(sr);
-                count++;
-            }
-
-            logger.info("Search found {} results with metadata (top {} requested)", results.size(), topK);
-            return results;
-
-        } catch (Exception e) {
-            logger.error("Failed to search vector with metadata", e);
-            return List.of();
-        } finally {
-            indexLock.readLock().unlock();
-        }
-    }
-
-    private double cosineSimilarity(float[] v1, float[] v2) {
+   private double cosineSimilarity(float[] v1, float[] v2) {
         if (v1.length != v2.length) {
             return 0.0;
         }
@@ -360,43 +289,8 @@ public class VectorStoreService {
 
         SimilarityResult(double similarity, String content) {
             this.similarity = similarity;
-            this.content = content;
-        }
-    }
+           this.content = content;
+       }
+   }
 
-    public static class SearchResult {
-        private final String documentId;
-        private final String sourceId;
-        private final String content;
-        private final double similarity;
-        private final JSONObject metadata;
-
-        public SearchResult(String documentId, String sourceId, String content, double similarity, JSONObject metadata) {
-            this.documentId = documentId;
-            this.sourceId = sourceId;
-            this.content = content;
-            this.similarity = similarity;
-            this.metadata = metadata;
-        }
-
-        public String getDocumentId() {
-            return documentId;
-        }
-
-        public String getSourceId() {
-            return sourceId;
-        }
-
-        public String getContent() {
-            return content;
-        }
-
-        public double getSimilarity() {
-            return similarity;
-        }
-
-        public JSONObject getMetadata() {
-            return metadata;
-        }
-    }
 }

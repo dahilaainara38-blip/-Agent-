@@ -11,7 +11,6 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.prompt.PromptTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import reactor.core.publisher.Flux;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -136,15 +135,10 @@ public class SpringAiChatService {
         log.info("Spring AI chat with tools called, userMessage: {}, allowedTools: {}",
                 userMessage.length() > 50 ? userMessage.substring(0, 50) + "..." : userMessage,
                 allowedToolNames);
-        return toolCallingService.chatWithTools(systemPrompt, userMessage, allowedToolNames);
-    }
+       return toolCallingService.chatWithTools(systemPrompt, userMessage, allowedToolNames);
+   }
 
-    public Flux<String> chatWithToolsStream(String userMessage) {
-        log.info("Spring AI chat with tools stream called (placeholder)");
-        return Flux.just("Stream mode not implemented yet. Use non-streaming mode.");
-    }
-
-    public String chatWithTemplate(String template, Map<String, Object> variables) {
+   public String chatWithTemplate(String template, Map<String, Object> variables) {
         PromptTemplate promptTemplate = new PromptTemplate(template);
         Prompt prompt = promptTemplate.create(variables);
         

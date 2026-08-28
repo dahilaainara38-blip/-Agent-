@@ -58,17 +58,9 @@
 <div id="toast" style="position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#e74c3c;color:#fff;padding:10px 24px;border-radius:8px;font-size:14px;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none;"></div>
 
 <script>
-var selected = sessionStorage.getItem('selectedSystem') || 'petplant';
-var sysLabel, capabilities, welcomeText;
-if (selected === 'petplant') {
-    sysLabel = '🐾🌿 PetPlant Assistant';
-    capabilities = ['🐾 Pet Care', '🌿 Plant Safety', '🌤 Weather', '🔍 Search'];
-    welcomeText = 'Welcome to PetPlant Assistant!<br>Ask about pet care, plant safety, and more.';
-} else {
-    sysLabel = '💬📱 WeChat iLink';
-    capabilities = ['🖼 Image Analysis', '🌤 Weather', '⏰ Time', '🔍 Web Search', '📎 File Analysis'];
-    welcomeText = 'Welcome to WeChat iLink!<br>Send images, files, or text. AI with vision + tools.';
-}
+var sysLabel = '🐾🌿 PetPlant Assistant';
+var capabilities = ['🐾 Pet Care', '🌿 Plant Safety', '🌤 Weather', '🔍 Search'];
+var welcomeText = 'Welcome to PetPlant Assistant!<br>Ask about pet care, plant safety, and more.';
 
 document.getElementById('sidebarSys').textContent = sysLabel;
 document.getElementById('headerSys').textContent = sysLabel;
@@ -160,7 +152,7 @@ async function sendText() {
 
     document.getElementById('msgInput').value = '';
     
-    var body = {text: text};
+    var body = {question: text || '请分析这张图片'};
     if (imageBase64) {
         body.image = imageBase64;
     }
@@ -169,7 +161,7 @@ async function sendText() {
         var res = await fetch('/api/care/qa', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({question: text || '请分析这张图片'})
+            body: JSON.stringify(body)
         });
         var x = await res.json();
         if (x.data && x.data.reply) {

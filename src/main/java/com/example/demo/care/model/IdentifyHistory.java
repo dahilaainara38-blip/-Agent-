@@ -23,23 +23,25 @@ public class IdentifyHistory {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
+    @Column(name = "user_id", nullable = false)
     private String userId;
 
+    @Column(name = "target_id")
     private Long targetId;
 
-    @Column(nullable = false, length = 20)
+    @Column(name = "identify_type", nullable = false, length = 20)
     private String identifyType;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(name = "result", columnDefinition = "TEXT")
     private String result;
 
-    @Column(length = 500)
+    @Column(name = "image_url", length = 500)
     private String imageUrl;
 
-    @Column(columnDefinition = "JSON")
+    @Column(name = "metadata", columnDefinition = "JSON")
     private String metadata;
 
+    @Column(name = "created_at")
     private LocalDateTime createdAt;
 
     @PrePersist

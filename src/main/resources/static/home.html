@@ -911,12 +911,6 @@
             <p>宠物健康管理、植物养护建议、AI 智能问答，一站式搞定</p>
             <span class="sys-badge">核心</span>
         </div>
-        <div class="sys-card chat" onclick="selectSystem('wechat')">
-            <div class="sys-icon">💬</div>
-            <h3>微信 iLink</h3>
-            <p>连接微信公众号，随时随地与 AI 助手对话，消息实时同步</p>
-            <span class="sys-badge">即时</span>
-        </div>
     </div>
 
     <!-- Features -->
@@ -982,7 +976,7 @@
 <div class="footer">Sekai PetPlant &copy; 2026 · 用心守护每一个小生命</div>
 
 <script>
-const VAPID_PUBLIC_KEY = 'BKfG-O8qPflqVK7oVXqCRHUQNi0u4Z2oT2wDvtqDpGOd5Iujq3cVEhuW6NviyHlJAzQEH0sOe0iAl1QpIVcNnns';
+const VAPID_PUBLIC_KEY = 'BMaNpciuS15Tqj9lE27TvS67e0Dwa0yiQD3SKya1OwnoAPnrVlust4JLM3NvhdQPVz-np174cixSInkmGbbFj_M';
 const SW_PATH = '/js/service-worker.js';
 
 // Init
@@ -1041,7 +1035,6 @@ async function loadStats() {
 
 // Navigation
 function selectSystem(type) {
-    sessionStorage.setItem('selectedSystem', type);
     location.href = type === 'petplant' ? '/care' : '/chat';
 }
 

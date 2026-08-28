@@ -71,11 +71,8 @@ public class ImageEditTool extends BaseTool {
         }
         
         if (!userSessionService.hasPendingImage(userId)) {
-            logger.warn("No pending image found for user {}", userId);
-            logger.warn("Session info - hasPendingImage: {}, hasPendingFile: {}", 
-                    userSessionService.hasPendingImage(userId),
-                    userSessionService.hasPendingFile(userId));
-            return ToolResult.failure("请先发送一张图片，然后再发送编辑指令");
+           logger.warn("No pending image found for user {}", userId);
+           return ToolResult.failure("请先发送一张图片，然后再发送编辑指令");
         }
         
         logger.info("Executing image edit tool, userId: {}, prompt: {}", userId, 

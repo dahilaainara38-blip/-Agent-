@@ -36,20 +36,10 @@ public class ToolCallResponse {
                     String s = p.toString().toLowerCase();
                     return s.endsWith(".png") || s.endsWith(".jpg") || s.endsWith(".jpeg") || s.endsWith(".gif");
                 })
-                .toList();
-    }
+               .toList();
+   }
 
-    public List<Path> audioFiles() {
-        if (generatedFiles == null) return List.of();
-        return generatedFiles.stream()
-                .filter(p -> {
-                    String s = p.toString().toLowerCase();
-                    return s.endsWith(".mp3") || s.endsWith(".wav") || s.endsWith(".ogg");
-                })
-                .toList();
-    }
-
-    public boolean hasGeneratedFiles() {
+   public boolean hasGeneratedFiles() {
         return generatedFiles != null && !generatedFiles.isEmpty();
     }
 
