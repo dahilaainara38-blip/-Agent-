@@ -1,6 +1,7 @@
 package com.example.demo.care;
 
 import com.example.demo.aicare.Result;
+import com.example.demo.ai.runtime.CareQaCompatibilityService;
 import com.example.demo.chat.ChatMessage;
 import com.example.demo.chat.entity.CareRecord;
 import com.example.demo.chat.entity.PlantProfile;
@@ -29,16 +30,19 @@ public class CareController {
     private final PlantProfileRepository plantProfileRepository;
     private final PetProfileRepository petProfileRepository;
     private final LegacyCareRecordRepository careRecordRepository;
+    private final CareQaCompatibilityService careQaCompatibilityService;
 
     public CareController(VisionService visionService, LlmService llmService,
                           PlantProfileRepository plantProfileRepository,
                           PetProfileRepository petProfileRepository,
-                          LegacyCareRecordRepository careRecordRepository) {
+                          LegacyCareRecordRepository careRecordRepository,
+                          CareQaCompatibilityService careQaCompatibilityService) {
         this.visionService = visionService;
         this.llmService = llmService;
         this.plantProfileRepository = plantProfileRepository;
         this.petProfileRepository = petProfileRepository;
         this.careRecordRepository = careRecordRepository;
+        this.careQaCompatibilityService = careQaCompatibilityService;
     }
 
     @PostMapping("/identify")
@@ -173,6 +177,11 @@ public class CareController {
                 question, targetType, targetId, params.get("image") != null, conversationId);
 
         try {
+            Optional<Map<String, Object>> runtimeResult = careQaCompatibilityService.qa(params, session);
+            if (runtimeResult.isPresent()) {
+                return Result.success(runtimeResult.get());
+            }
+
             StringBuilder context = new StringBuilder();
             String targetName = "";
             String species = "";

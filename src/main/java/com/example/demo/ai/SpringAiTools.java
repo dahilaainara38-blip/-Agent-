@@ -3,10 +3,12 @@ package com.example.demo.ai;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONObject;
 import com.example.demo.agent.tools.*;
+import com.example.demo.agent.service.ArtifactService;
 import com.example.demo.care.service.*;
 import com.example.demo.chat.UserSessionService;
 import com.example.demo.disease.DiseaseRecognitionService;
 import com.example.demo.disease.model.DiseaseResult;
+import com.example.demo.imagegen.ImageGenerationService;
 import com.example.demo.weather.model.WeatherResponse;
 import com.example.demo.weather.service.WeatherService;
 import jakarta.annotation.PostConstruct;
@@ -37,6 +39,8 @@ public class SpringAiTools {
     private final NearbyServiceSearchService nearbyServiceSearchService;
     private final DiseaseRecognitionService diseaseRecognitionService;
     private final UserSessionService userSessionService;
+    private final ArtifactService artifactService;
+    private final ImageGenerationService imageGenerationService;
 
     public SpringAiTools(WeatherService weatherService,
                          WebSearchTool webSearchTool,
@@ -49,9 +53,11 @@ public class SpringAiTools {
                          PetCareQueryService petCareQueryService,
                          PlantSafetyQueryService plantSafetyQueryService,
                          PetFoodSafetyService petFoodSafetyService,
-                         NearbyServiceSearchService nearbyServiceSearchService,
-                         DiseaseRecognitionService diseaseRecognitionService,
-                         UserSessionService userSessionService) {
+                               NearbyServiceSearchService nearbyServiceSearchService,
+                               DiseaseRecognitionService diseaseRecognitionService,
+                               UserSessionService userSessionService,
+                               ArtifactService artifactService,
+                               ImageGenerationService imageGenerationService) {
         this.weatherService = weatherService;
         this.webSearchTool = webSearchTool;
         this.imageAnalysisTool = imageAnalysisTool;
@@ -66,6 +72,8 @@ public class SpringAiTools {
         this.nearbyServiceSearchService = nearbyServiceSearchService;
         this.diseaseRecognitionService = diseaseRecognitionService;
         this.userSessionService = userSessionService;
+        this.artifactService = artifactService;
+        this.imageGenerationService = imageGenerationService;
     }
 
     @PostConstruct
@@ -141,6 +149,9 @@ public class SpringAiTools {
         String userId = context.userId();
         log.info("[Tool] analyzeImage called, userId: {}, prompt: {}", userId, prompt);
         try {
+            if (context.artifactId() != null && !context.artifactId().isBlank()) {
+                return artifactService.analyze(context.artifactId(), userId, prompt);
+            }
             JSONObject params = new JSONObject();
             params.put("prompt", prompt);
             if (userId != null && !userId.isBlank()) {
@@ -164,6 +175,11 @@ public class SpringAiTools {
         String userId = context.userId();
         log.info("[Tool] editImage called, userId: {}, prompt: {}", userId, prompt);
         try {
+            if (context.artifactId() != null && !context.artifactId().isBlank()) {
+                String editedPath = imageGenerationService.editImage(
+                        artifactService.readOwnedBase64(context.artifactId(), userId), prompt);
+                return "[IMAGE:" + editedPath + "]";
+            }
             JSONObject params = new JSONObject();
             params.put("prompt", prompt);
             if (userId != null && !userId.isBlank()) {
@@ -375,13 +391,10 @@ public class SpringAiTools {
             return "请先登录后再使用病害诊断功能。";
         }
 
-        String pendingImageBase64 = userSessionService.getPendingImageBase64(userId);
-        if (pendingImageBase64 == null || pendingImageBase64.isBlank()) {
-            return "请先上传植物叶片或宠物皮肤的照片，然后再发起病害诊断请求。";
-        }
-
         try {
-            byte[] imageBytes = Base64.getDecoder().decode(pendingImageBase64);
+            byte[] imageBytes = context.artifactId() != null && !context.artifactId().isBlank()
+                    ? artifactService.readOwnedBytes(context.artifactId(), userId)
+                    : Base64.getDecoder().decode(userSessionService.getPendingImageBase64(userId));
             DiseaseResult result = diseaseRecognitionService.diagnose(imageBytes, type, userId, null);
 
             StringBuilder sb = new StringBuilder();

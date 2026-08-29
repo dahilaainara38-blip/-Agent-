@@ -33,6 +33,9 @@ public class VectorStore {
     @Column(name = "conversation_id", length = 255)
     private String conversationId;
 
+    @Column(name = "owner_id", length = 100)
+    private String ownerId;
+
     @Column(name = "timestamp")
     private LocalDateTime timestamp;
 
@@ -101,6 +104,14 @@ public class VectorStore {
 
     public void setConversationId(String conversationId) {
         this.conversationId = conversationId;
+    }
+
+    public String getOwnerId() {
+        return ownerId;
+    }
+
+    public void setOwnerId(String ownerId) {
+        this.ownerId = ownerId;
     }
 
     public LocalDateTime getTimestamp() {

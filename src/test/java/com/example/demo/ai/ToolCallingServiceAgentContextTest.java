@@ -9,6 +9,7 @@ import com.example.demo.agent.tools.ImageAnalysisTool;
 import com.example.demo.agent.tools.ImageEditTool;
 import com.example.demo.agent.tools.ImageGenerationTool;
 import com.example.demo.agent.tools.WebSearchTool;
+import com.example.demo.agent.service.ArtifactService;
 import com.example.demo.care.service.CareAdvancedService;
 import com.example.demo.care.service.CareRecordService;
 import com.example.demo.care.service.CareReminderService;
@@ -19,6 +20,7 @@ import com.example.demo.care.service.PlantSafetyQueryService;
 import com.example.demo.chat.UserSessionService;
 import com.example.demo.chat.LlmService;
 import com.example.demo.disease.DiseaseRecognitionService;
+import com.example.demo.imagegen.ImageGenerationService;
 import com.example.demo.weather.service.WeatherService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -58,7 +60,9 @@ class ToolCallingServiceAgentContextTest {
                 mock(PetFoodSafetyService.class),
                 mock(NearbyServiceSearchService.class),
                 mock(DiseaseRecognitionService.class),
-                mock(UserSessionService.class)
+                mock(UserSessionService.class),
+                mock(ArtifactService.class),
+                mock(ImageGenerationService.class)
         );
 
         ToolBroker toolBroker = new ToolBroker(

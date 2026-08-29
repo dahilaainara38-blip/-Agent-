@@ -31,6 +31,11 @@ public class PageController {
         return "forward:/chat.html";
     }
 
+    @GetMapping("/agent")
+    public String agent() {
+        return "forward:/agent.html";
+    }
+
     @GetMapping("/shop")
     public String shop() {
         return "forward:/shop.html";
