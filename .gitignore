@@ -40,6 +40,10 @@ login_state.json
 rag_knowledge.sqlite
 *.sqlite
 *.db
+*.sqlite-shm
+*.sqlite-wal
+*.db-shm
+*.db-wal
 
 ### Local secrets & config ###
 .env

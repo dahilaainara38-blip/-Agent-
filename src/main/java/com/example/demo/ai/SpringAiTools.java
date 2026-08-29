@@ -136,8 +136,9 @@ public class SpringAiTools {
 
     @Tool(name = "analyzeImage", description = "图片分析工具，分析用户上传的图片内容。可以识别物体、描述场景、提取文字等。用户需要先上传图片才能使用此工具。")
     public String analyzeImage(
-            @ToolParam(description = "分析指令，如：描述图片内容、识别图片中的文字、列出图片中的物体", required = true) String prompt) {
-        String userId = UserContextHolder.getUserId();
+            @ToolParam(description = "分析指令，如：描述图片内容、识别图片中的文字、列出图片中的物体", required = true) String prompt,
+            @AgentContextParam AgentContext context) {
+        String userId = context.userId();
         log.info("[Tool] analyzeImage called, userId: {}, prompt: {}", userId, prompt);
         try {
             JSONObject params = new JSONObject();
@@ -158,8 +159,9 @@ public class SpringAiTools {
 
     @Tool(name = "editImage", description = "图片编辑工具，对用户上传的图片进行修改、编辑。适用于图片优化、风格转换等场景。")
     public String editImage(
-            @ToolParam(description = "编辑指令，如：将图片转为水彩风格、增强图片对比度", required = true) String prompt) {
-        String userId = UserContextHolder.getUserId();
+            @ToolParam(description = "编辑指令，如：将图片转为水彩风格、增强图片对比度", required = true) String prompt,
+            @AgentContextParam AgentContext context) {
+        String userId = context.userId();
         log.info("[Tool] editImage called, userId: {}, prompt: {}", userId, prompt);
         try {
             JSONObject params = new JSONObject();
@@ -187,8 +189,9 @@ public class SpringAiTools {
             @ToolParam(description = "提醒类型：浇水、施肥、驱虫、疫苗、喂药、其他", required = true) String reminderType,
             @ToolParam(description = "提醒内容详情", required = true) String content,
             @ToolParam(description = "提醒时间，格式：yyyy-MM-dd HH:mm，如 2026-07-30 09:00", required = true) String dueAt,
-            @ToolParam(description = "重复规则：DAILY（每日）、WEEKLY（每周）、MONTHLY（每月），可留空") String repeatRule) {
-        String userId = UserContextHolder.getUserId();
+            @ToolParam(description = "重复规则：DAILY（每日）、WEEKLY（每周）、MONTHLY（每月），可留空") String repeatRule,
+            @AgentContextParam AgentContext context) {
+        String userId = context.userId();
         log.info("[Tool] createCareReminder called, userId: {}, type: {}, reminder: {}", userId, targetType, reminderType);
         if (userId == null || userId.isBlank()) {
             return "请先登录后再创建提醒";
@@ -197,8 +200,8 @@ public class SpringAiTools {
     }
 
     @Tool(name = "completeCareReminder", description = "完成护理提醒工具，用户回复'已完成'后调用，自动写入护理记录并创建下次重复提醒。")
-    public String completeCareReminder() {
-        String userId = UserContextHolder.getUserId();
+    public String completeCareReminder(@AgentContextParam AgentContext context) {
+        String userId = context.userId();
         log.info("[Tool] completeCareReminder called, userId: {}", userId);
         if (userId == null || userId.isBlank()) {
             return "请先登录";
@@ -207,8 +210,8 @@ public class SpringAiTools {
     }
 
     @Tool(name = "listCareReminders", description = "查看当前用户的所有护理提醒列表。")
-    public String listCareReminders() {
-        String userId = UserContextHolder.getUserId();
+    public String listCareReminders(@AgentContextParam AgentContext context) {
+        String userId = context.userId();
         log.info("[Tool] listCareReminders called, userId: {}", userId);
         if (userId == null || userId.isBlank()) {
             return "请先登录";
@@ -278,8 +281,9 @@ public class SpringAiTools {
             @ToolParam(description = "目标ID", required = true) Long targetId,
             @ToolParam(description = "药品名称和剂量，如：阿莫西林 250mg", required = true) String medicine,
             @ToolParam(description = "用法说明，如：每日2次，饭后服用", required = true) String instruction,
-            @ToolParam(description = "处方来源，如：张三兽医", required = true) String prescribedBy) {
-        String userId = UserContextHolder.getUserId();
+            @ToolParam(description = "处方来源，如：张三兽医", required = true) String prescribedBy,
+            @AgentContextParam AgentContext context) {
+        String userId = context.userId();
         log.info("[Tool] saveMedication called, userId: {}, medicine: {}", userId, medicine);
         if (userId == null || userId.isBlank()) {
             return "请先登录";
@@ -288,8 +292,8 @@ public class SpringAiTools {
     }
 
     @Tool(name = "checkMedication", description = "检查用药记录，查看是否有漏服、重复用药和疫苗到期情况。")
-    public String checkMedication() {
-        String userId = UserContextHolder.getUserId();
+    public String checkMedication(@AgentContextParam AgentContext context) {
+        String userId = context.userId();
         log.info("[Tool] checkMedication called, userId: {}", userId);
         if (userId == null || userId.isBlank()) {
             return "请先登录";
@@ -301,8 +305,9 @@ public class SpringAiTools {
 
     @Tool(name = "compareImages", description = "对比植物或宠物的图片变化。对比叶色、生长状态、病斑、皮肤、伤口、体型和毛发变化。")
     public String compareImages(
-            @ToolParam(description = "对比类型：plant（植物）或 pet（宠物）", required = true) String type) {
-        String userId = UserContextHolder.getUserId();
+            @ToolParam(description = "对比类型：plant（植物）或 pet（宠物）", required = true) String type,
+            @AgentContextParam AgentContext context) {
+        String userId = context.userId();
         log.info("[Tool] compareImages called, userId: {}, type: {}", userId, type);
         if (userId == null || userId.isBlank()) {
             return "请先登录";
@@ -319,8 +324,9 @@ public class SpringAiTools {
             @ToolParam(description = "品种，如：金毛、英短、多肉、绿萝") String breed,
             @ToolParam(description = "年龄，如：2岁、6个月") String age,
             @ToolParam(description = "季节，如：春季、夏季、秋季、冬季") String season,
-            @ToolParam(description = "天气情况，如：高温、寒潮、晴朗") String weather) {
-        String userId = UserContextHolder.getUserId();
+            @ToolParam(description = "天气情况，如：高温、寒潮、晴朗") String weather,
+            @AgentContextParam AgentContext context) {
+        String userId = context.userId();
         log.info("[Tool] generateCarePlan called, userId: {}, breed: {}", userId, breed);
         if (userId == null || userId.isBlank()) {
             return "请先登录";
@@ -361,8 +367,9 @@ public class SpringAiTools {
 
     @Tool(name = "diagnoseDisease", description = "植物病虫害/宠物皮肤病视觉诊断工具。上传植物叶子或宠物皮肤照片，AI识别病害类型并给出治疗方案。")
     public String diagnoseDisease(
-            @ToolParam(description = "诊断类型：plant（植物病虫害）或 pet（宠物皮肤病）", required = true) String type) {
-        String userId = UserContextHolder.getUserId();
+            @ToolParam(description = "诊断类型：plant（植物病虫害）或 pet（宠物皮肤病）", required = true) String type,
+            @AgentContextParam AgentContext context) {
+        String userId = context.userId();
         log.info("[Tool] diagnoseDisease called, userId: {}, type: {}", userId, type);
         if (userId == null || userId.isBlank()) {
             return "请先登录后再使用病害诊断功能。";

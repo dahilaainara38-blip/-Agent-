@@ -47,12 +47,18 @@ public class SQLiteConfig {
         @Value("${spring.datasource.password:}")
         private String mysqlPassword;
 
+        @Value("${spring.datasource.driver-class-name:com.mysql.cj.jdbc.Driver}")
+        private String mysqlDriverClassName;
+
+        @Value("${spring.jpa.properties.hibernate.dialect:org.hibernate.dialect.MySQLDialect}")
+        private String mysqlHibernateDialect;
+
         @Bean(name = "mysqlDataSource")
         @Primary
         public DataSource mysqlDataSource() {
             logger.info("========== Initializing MySQL DataSource ==========");
             return DataSourceBuilder.create()
-                    .driverClassName("com.mysql.cj.jdbc.Driver")
+                    .driverClassName(mysqlDriverClassName)
                     .url(mysqlUrl)
                     .username(mysqlUsername)
                     .password(mysqlPassword)
@@ -78,7 +84,7 @@ public class SQLiteConfig {
             em.setJpaVendorAdapter(vendorAdapter);
             
             Map<String, Object> properties = new HashMap<>();
-            properties.put("hibernate.dialect", "org.hibernate.dialect.MySQLDialect");
+            properties.put("hibernate.dialect", mysqlHibernateDialect);
             properties.put("hibernate.hbm2ddl.auto", "update");
             properties.put("hibernate.show_sql", "false");
             properties.put("hibernate.format_sql", "true");

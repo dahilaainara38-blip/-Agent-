@@ -132,10 +132,15 @@ public class SpringAiChatService {
 
     public ToolCallResponse chatWithTools(String userMessage, String systemPrompt,
                                            Set<String> allowedToolNames) {
+        return chatWithTools(userMessage, systemPrompt, allowedToolNames, AgentContext.anonymous());
+    }
+
+    public ToolCallResponse chatWithTools(String userMessage, String systemPrompt,
+                                           Set<String> allowedToolNames, AgentContext context) {
         log.info("Spring AI chat with tools called, userMessage: {}, allowedTools: {}",
                 userMessage.length() > 50 ? userMessage.substring(0, 50) + "..." : userMessage,
                 allowedToolNames);
-       return toolCallingService.chatWithTools(systemPrompt, userMessage, allowedToolNames);
+       return toolCallingService.chatWithTools(systemPrompt, userMessage, allowedToolNames, context);
    }
 
    public String chatWithTemplate(String template, Map<String, Object> variables) {

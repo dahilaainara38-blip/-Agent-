@@ -110,6 +110,10 @@ public class ToolCallingService {
 
         Parameter[] params = method.getParameters();
         for (Parameter param : params) {
+            if (param.isAnnotationPresent(AgentContextParam.class)) {
+                continue;
+            }
+
             String paramName = param.getName();
 
             JSONObject paramSchema = new JSONObject();
@@ -154,6 +158,11 @@ public class ToolCallingService {
 
     public ToolCallResponse chatWithTools(String systemPrompt, String userMessage,
                                            Set<String> allowedToolNames) {
+        return chatWithTools(systemPrompt, userMessage, allowedToolNames, AgentContext.anonymous());
+    }
+
+    public ToolCallResponse chatWithTools(String systemPrompt, String userMessage,
+                                           Set<String> allowedToolNames, AgentContext context) {
         String traceId = UUID.randomUUID().toString().substring(0, 8);
         log.info("[Trace:{}] Tool chat started, message length: {}",
                 traceId, userMessage.length());
@@ -172,11 +181,19 @@ public class ToolCallingService {
         userMsg.put("content", userMessage);
         messages.add(userMsg);
 
-        return executeToolLoop(messages, allowedToolNames, traceId);
+        return executeToolLoop(messages, allowedToolNames, traceId, context);
+    }
+
+    public ToolCallResponse chatWithMessages(JSONArray messages,
+                                             Set<String> allowedToolNames,
+                                             AgentContext context) {
+        String traceId = UUID.randomUUID().toString().substring(0, 8);
+        return executeToolLoop(messages, allowedToolNames, traceId,
+                context == null ? AgentContext.anonymous() : context);
     }
 
     private ToolCallResponse executeToolLoop(JSONArray messages, Set<String> allowedToolNames,
-                                              String traceId) {
+                                              String traceId, AgentContext context) {
         JSONArray tools = buildToolsSchema(allowedToolNames);
         List<ToolCallResult> toolCallHistory = new ArrayList<>();
         List<Path> generatedFiles = new ArrayList<>();
@@ -219,7 +236,7 @@ public class ToolCallingService {
                             try {
                                 log.info("[Trace:{}] Executing tool: {} with args: {}",
                                         traceId, tc.toolName, tc.arguments);
-                                result = executeTool(tc.toolName, tc.arguments);
+                                result = executeTool(tc.toolName, tc.arguments, context);
                                 log.info("[Trace:{}] Tool {} completed in {}ms",
                                         traceId, tc.toolName, System.currentTimeMillis() - start);
                             } catch (Exception e) {
@@ -434,6 +451,10 @@ public class ToolCallingService {
     }
 
     public String executeTool(String toolName, JSONObject arguments) {
+        return executeTool(toolName, arguments, AgentContext.anonymous());
+    }
+
+    public String executeTool(String toolName, JSONObject arguments, AgentContext context) {
         ToolInfo toolInfo = toolRegistry.get(toolName);
         if (toolInfo == null) {
             log.warn("Unknown tool: {}", toolName);
@@ -448,7 +469,9 @@ public class ToolCallingService {
                 String paramName = paramTypes[i].getName();
                 Class<?> paramType = paramTypes[i].getType();
 
-                if (arguments != null && arguments.containsKey(paramName)) {
+                if (paramTypes[i].isAnnotationPresent(AgentContextParam.class)) {
+                    args[i] = context;
+                } else if (arguments != null && arguments.containsKey(paramName)) {
                     args[i] = convertArgument(arguments.get(paramName), paramType);
                 } else {
                     args[i] = getDefaultValue(paramType);
