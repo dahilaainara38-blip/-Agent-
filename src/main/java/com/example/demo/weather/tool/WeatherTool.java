@@ -97,35 +97,4 @@ public class WeatherTool extends BaseTool {
         
         return sb.toString();
     }
-
-    public static boolean matchesIntent(String userMessage) {
-        if (userMessage == null) {
-            return false;
-        }
-        
-        String msg = userMessage.toLowerCase();
-        return msg.contains("天气") || msg.contains("气温") || msg.contains("温度") 
-            || msg.contains("下雨") || msg.contains("晴天") || msg.contains("多云")
-            || msg.contains("刮风") || msg.contains("湿度") || msg.contains("预报");
-    }
-
-    public static String extractCity(String userMessage) {
-        if (userMessage == null) {
-            return null;
-        }
-        
-        String[] cityKeywords = {
-            "北京", "上海", "广州", "深圳", "杭州", "南京", "成都", "武汉", "西安", "重庆",
-            "天津", "苏州", "郑州", "长沙", "东莞", "青岛", "合肥", "佛山", "沈阳", "厦门",
-            "哈尔滨", "大连", "宁波", "福州", "无锡", "昆明", "济南", "温州", "南宁", "长春"
-        };
-        
-        for (String city : cityKeywords) {
-            if (userMessage.contains(city)) {
-                return city;
-            }
-        }
-        
-        return null;
-    }
 }

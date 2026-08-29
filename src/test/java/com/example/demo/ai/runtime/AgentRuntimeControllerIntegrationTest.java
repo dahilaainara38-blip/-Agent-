@@ -33,6 +33,15 @@ class AgentRuntimeControllerIntegrationTest {
     }
 
     @Test
+    void careQaRoutesThroughAgentRuntimeOnly() throws Exception {
+        String body = "{\"question\":\"你好\",\"targetType\":\"PET\",\"targetId\":12}";
+        mockMvc.perform(post("/api/care/qa").contentType("application/json").content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(500))
+                .andExpect(jsonPath("$.message").value("问答失败：请先登录后使用 Agent 工作台"));
+    }
+
+    @Test
     void toolCatalogExposesAllBrokeredTools() throws Exception {
         mockMvc.perform(get("/api/agent/tools"))
                 .andExpect(status().isOk())

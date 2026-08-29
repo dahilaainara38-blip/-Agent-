@@ -12,10 +12,10 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class CareQaCompatibilityServiceTest {
@@ -34,8 +34,7 @@ class CareQaCompatibilityServiceTest {
         CareQaCompatibilityService service = new CareQaCompatibilityService(
                 runtimeService,
                 mock(PlantProfileRepository.class),
-                petProfileRepository,
-                true
+                petProfileRepository
         );
         MockHttpSession session = new MockHttpSession();
         session.setAttribute("user", "user-1");
@@ -51,28 +50,28 @@ class CareQaCompatibilityServiceTest {
         params.put("question", "猫怎么样");
         params.put("targetType", "pet");
         params.put("targetId", 12);
-        Optional<Map<String, Object>> result = service.qa(params, session);
+        Map<String, Object> result = service.qa(params, session);
 
-        assertTrue(result.isPresent());
-        assertEquals("收到", result.get().get("reply"));
-        assertEquals("咪咪", result.get().get("targetName"));
-        assertEquals("猫", result.get().get("species"));
-        assertEquals("agent_1", result.get().get("conversationId"));
-        assertEquals("trace_1", result.get().get("traceId"));
+        assertEquals("收到", result.get("reply"));
+        assertEquals("咪咪", result.get("targetName"));
+        assertEquals("猫", result.get("species"));
+        assertEquals("agent_1", result.get("conversationId"));
+        assertEquals("trace_1", result.get("traceId"));
     }
 
     @Test
-    void disabledRuntimeKeepsLegacyPath() {
+    void runtimeFailuresPropagateInsteadOfFallingBackToLegacyPath() {
         CareQaCompatibilityService service = new CareQaCompatibilityService(
                 runtimeService,
                 mock(PlantProfileRepository.class),
-                petProfileRepository,
-                false
+                petProfileRepository
         );
         MockHttpSession session = new MockHttpSession();
-        session.setAttribute("user", "user-1");
+        when(runtimeService.chat(any(), any()))
+                .thenThrow(new AgentAuthenticationException("请先登录"));
 
-        assertEquals(Optional.empty(), service.qa(Map.of("question", "你好"), session));
-        verifyNoInteractions(runtimeService);
+        assertThrows(AgentAuthenticationException.class,
+                () -> service.qa(Map.of("question", "你好"), session));
+        verify(runtimeService).chat(any(), any());
     }
 }

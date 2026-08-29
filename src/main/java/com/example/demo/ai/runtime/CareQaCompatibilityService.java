@@ -5,37 +5,32 @@ import com.example.demo.chat.entity.PlantProfile;
 import com.example.demo.chat.repository.mysql.PetProfileRepository;
 import com.example.demo.chat.repository.mysql.PlantProfileRepository;
 import jakarta.servlet.http.HttpSession;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
+/**
+ * 旧 /api/care/qa 契约的兼容适配层：统一转发到 Agent Runtime，
+ * 并补齐旧前端依赖的 targetName/species 字段。
+ */
 @Service
 public class CareQaCompatibilityService {
 
     private final AgentRuntimeService runtimeService;
     private final PlantProfileRepository plantProfileRepository;
     private final PetProfileRepository petProfileRepository;
-    private final boolean enabled;
 
     public CareQaCompatibilityService(AgentRuntimeService runtimeService,
                                        PlantProfileRepository plantProfileRepository,
-                                       PetProfileRepository petProfileRepository,
-                                       @Value("${agent.runtime.enabled:false}") boolean enabled) {
+                                       PetProfileRepository petProfileRepository) {
         this.runtimeService = runtimeService;
         this.plantProfileRepository = plantProfileRepository;
         this.petProfileRepository = petProfileRepository;
-        this.enabled = enabled;
     }
 
-    public Optional<Map<String, Object>> qa(Map<String, Object> params, HttpSession session) {
-        if (!enabled || session == null || session.getAttribute("user") == null) {
-            return Optional.empty();
-        }
-
+    public Map<String, Object> qa(Map<String, Object> params, HttpSession session) {
         String targetType = normalizeType(params.get("targetType"));
         Long targetId = params.get("targetId") instanceof Number number ? number.longValue() : null;
         String image = params.get("image") instanceof String value ? value : null;
@@ -74,7 +69,7 @@ public class CareQaCompatibilityService {
                 });
             }
         }
-        return Optional.of(result);
+        return result;
     }
 
     private String normalizeType(Object value) {

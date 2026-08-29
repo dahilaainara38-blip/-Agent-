@@ -170,9 +170,10 @@ class AgentRuntimeServiceTest {
                 confirmationService, memoryService, mock(CareEventRepository.class), false, 10
         );
 
-        assertThrows(IllegalStateException.class, () -> disabled.chat(
+        IllegalStateException error = assertThrows(IllegalStateException.class, () -> disabled.chat(
                 new AgentChatRequest(null, "你好", null, null, null, null, null),
                 session
         ));
+        assertEquals("Agent Runtime 未开启，请设置 agent.runtime.enabled=true 后重试", error.getMessage());
     }
 }

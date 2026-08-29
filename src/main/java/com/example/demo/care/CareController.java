@@ -2,7 +2,6 @@ package com.example.demo.care;
 
 import com.example.demo.aicare.Result;
 import com.example.demo.ai.runtime.CareQaCompatibilityService;
-import com.example.demo.chat.ChatMessage;
 import com.example.demo.chat.entity.CareRecord;
 import com.example.demo.chat.entity.PlantProfile;
 import com.example.demo.chat.entity.PetProfile;
@@ -163,87 +162,12 @@ public class CareController {
 
     @PostMapping("/qa")
     public Result<Map<String, Object>> qa(@RequestBody Map<String, Object> params, HttpSession session) {
-        String question = (String) params.get("question");
-        String targetType = (String) params.get("targetType");
-        Long targetId = params.get("targetId") != null ? ((Number) params.get("targetId")).longValue() : null;
-
-        String conversationId = (String) session.getAttribute("conversationId");
-        if (conversationId == null) {
-            conversationId = "web_" + System.currentTimeMillis() + "_" + System.nanoTime();
-            session.setAttribute("conversationId", conversationId);
-        }
-
-        logger.info("Care QA request: {}, targetType: {}, targetId: {}, hasImage: {}, conversationId: {}",
-                question, targetType, targetId, params.get("image") != null, conversationId);
+        logger.info("Care QA request: {}, targetType: {}, targetId: {}, hasImage: {}",
+                params.get("question"), params.get("targetType"), params.get("targetId"), params.get("image") != null);
 
         try {
-            Optional<Map<String, Object>> runtimeResult = careQaCompatibilityService.qa(params, session);
-            if (runtimeResult.isPresent()) {
-                return Result.success(runtimeResult.get());
-            }
-
-            StringBuilder context = new StringBuilder();
-            String targetName = "";
-            String species = "";
-
-            if (targetType != null && targetId != null) {
-                if ("PLANT".equalsIgnoreCase(targetType)) {
-                    Optional<PlantProfile> plantOpt = plantProfileRepository.findById(targetId);
-                    if (plantOpt.isPresent()) {
-                        PlantProfile plant = plantOpt.get();
-                        targetName = plant.getName();
-                        species = plant.getSpecies();
-                        context.append("植物档案：").append(plant.getName())
-                               .append("，品种：").append(plant.getSpecies())
-                               .append("\n");
-                    }
-                } else if ("PET".equalsIgnoreCase(targetType)) {
-                    Optional<PetProfile> petOpt = petProfileRepository.findById(targetId);
-                    if (petOpt.isPresent()) {
-                        PetProfile pet = petOpt.get();
-                        targetName = pet.getName();
-                        species = pet.getSpecies();
-                        context.append("宠物档案：").append(pet.getName())
-                               .append("，品种：").append(pet.getSpecies())
-                               .append("\n");
-                    }
-                }
-
-                List<CareRecord> records = careRecordRepository.findByTargetTypeAndTargetIdOrderByCreatedAtDesc(targetType, targetId);
-                if (!records.isEmpty()) {
-                    context.append("护理记录：\n");
-                    for (CareRecord record : records) {
-                        context.append("- ").append(record.getRecordType())
-                               .append("：").append(record.getContent())
-                               .append("（").append(record.getCreatedAt()).append("）\n");
-                    }
-                }
-            }
-
-            String systemPrompt = "你是一位专业的植物和宠物护理专家，请提供详细、科学的护理建议。";
-            if (context.length() > 0) {
-                systemPrompt = "以下是用户的" + ("PLANT".equalsIgnoreCase(targetType) ? "植物" : "宠物") + "档案和护理记录，请基于这些信息回答问题：\n\n" + 
-                               context.toString() + "\n\n" + systemPrompt;
-            }
-
-            // 处理用户上传的图片：通过视觉服务分析后作为上下文注入
-            String imageBase64 = (String) params.get("image");
-            if (imageBase64 != null && !imageBase64.isEmpty()) {
-                byte[] imageBytes = Base64.getDecoder().decode(imageBase64);
-                String imageAnalysis = visionService.analyzeImageWithCustomPrompt(
-                        imageBytes, "请描述这张图片的内容，重点关注与植物或宠物护理相关的信息。");
-                systemPrompt = "用户上传了一张图片，以下是图片内容分析：\n" + imageAnalysis + "\n\n" + systemPrompt;
-            }
-
-            String reply = llmService.chatWithMemory(conversationId, question, systemPrompt);
-            
-            Map<String, Object> result = new HashMap<>();
-            result.put("reply", reply);
-            result.put("targetName", targetName);
-            result.put("species", species);
-            
-            return Result.success(result);
-        } catch (IOException e) {
+            return Result.success(careQaCompatibilityService.qa(params, session));
+        } catch (Exception e) {
             logger.error("Care QA failed", e);
             return Result.error("问答失败：" + e.getMessage());
         }

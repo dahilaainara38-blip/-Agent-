@@ -122,7 +122,7 @@ public class AgentRuntimeService {
 
     private void requireEnabled() {
         if (!runtimeEnabled) {
-            throw new IllegalStateException("Agent Runtime 未开启，已回退旧链路");
+            throw new IllegalStateException("Agent Runtime 未开启，请设置 agent.runtime.enabled=true 后重试");
         }
     }
 
