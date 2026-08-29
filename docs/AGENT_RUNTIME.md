@@ -29,14 +29,15 @@ The refactor started from Git commit `8e307a2`. The current compatibility paths 
 {
   "conversationId": "optional",
   "message": "required when no image is supplied",
-  "imageBase64": "optional",
+  "artifactId": "preferred image reference from POST /api/agent/artifacts",
+  "imageBase64": "compatibility input, stored as an artifact before orchestration",
   "subjectType": "PET or PLANT",
   "subjectId": 123,
   "allowedTools": ["optional read-tool subset"]
 }
 ```
 
-It returns a synchronous response containing the final reply, conversation ID, trace ID, tool history, generated file URLs, and future action cards.
+It returns a synchronous response containing the final reply, conversation ID, artifact reference, trace ID, tool history, generated file URLs, and action cards.
 
 ## Implementation Stages
 
@@ -48,10 +49,9 @@ It returns a synchronous response containing the final reply, conversation ID, t
 
 2. **Runtime v1**
    - Build conversation state from `HttpSession`.
-   - Load owned `CareTarget` and recent `CareRecord` data.
-   - Store uploaded images through `UserSessionService`.
-   - Reuse `ChatMemoryService`.
-   - Start with read-only tools.
+   - Normalize owned `CareTarget` records into `CareSubject` compatibility views.
+   - Store uploaded images under `uploads/agent` and reference them with `Artifact`.
+   - Store conversation turns in `agent_conversation` and `agent_message`.
    - Return tool traces and generated files.
 
 3. **Domain event model**
@@ -61,17 +61,30 @@ It returns a synchronous response containing the final reply, conversation ID, t
 
 4. **Memory and retrieval**
    - Add user, conversation, and source filters to vector search.
-   - Separate episodic and semantic memory.
-   - Cap retrieved context and record provenance.
+   - Persist vector ownership in SQLite.
+   - Allow only user-owned conversation memory and public knowledge documents.
 
 5. **Write actions**
    - Return confirmation cards before creating reminders, saving records, consuming inventory, or publishing content.
    - Execute confirmed writes through the Tool Broker only.
 
 6. **Legacy cleanup**
-   - Route `/api/care/qa` through the runtime behind a feature switch.
+   - Route authenticated `/api/care/qa` requests through the runtime behind `agent.runtime.enabled`.
    - Keep old APIs as facades until browser flows are migrated.
    - Remove manual intent routing after regression tests pass.
+
+## Implemented Runtime Surface
+
+- `POST /api/agent/messages`
+- `GET /api/agent/subjects`
+- `POST /api/agent/conversations/new`
+- `GET /api/agent/tools`
+- `POST /api/agent/artifacts`
+- `GET /api/agent/artifacts/{id}/content`
+- `POST /api/agent/confirmations/{id}/confirm`
+- `POST /api/agent/confirmations/{id}/cancel`
+
+The runtime stores structured state in `agent_conversation`, `agent_message`, `agent_tool_trace`, `artifact`, `care_subject`, `care_event`, and `action_confirmation`. Existing business tables remain in place as compatibility readers and execution targets.
 
 ## Tool Policy
 
@@ -84,7 +97,7 @@ Automatic in v1:
 - `searchNearbyService`, `triageSymptoms`
 - `checkMedication`, `compareImages`, `listCareReminders`
 
-Deferred until confirmation cards exist:
+The planner may propose these writes, but the Tool Broker stores an `action_confirmation` instead of executing them. They run only after the owner confirms:
 
 - `createCareReminder`, `completeCareReminder`
 - `saveMedication`, `generateCarePlan`
@@ -106,9 +119,7 @@ Deferred until confirmation cards exist:
 ## Rollback
 
 - Revert the failed stage commit.
+- For an immediate behavioral rollback without a revert, set `agent.runtime.enabled=false` or `AGENT_RUNTIME_ENABLED=false`.
+- The legacy `/api/care/qa` path remains compiled and selectable.
 - If runtime behavior fails globally, use the last pre-runtime commit `8e307a2`.
 - Do not reset a branch containing uncommitted work.
-
-## Remote History Caution
-
-The requested GitHub remote must not receive the old full `main` history without explicit approval. That history contains previously committed personal PDFs and images. A clean-history branch is required before publishing the rewritten project.
