@@ -2,6 +2,9 @@ package com.example.demo.ai;
 
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.example.demo.agent.domain.ActionConfirmation;
+import com.example.demo.agent.repository.ActionConfirmationRepository;
+import com.example.demo.agent.repository.ToolTraceRepository;
 import com.example.demo.agent.tools.ImageAnalysisTool;
 import com.example.demo.agent.tools.ImageEditTool;
 import com.example.demo.agent.tools.ImageGenerationTool;
@@ -22,8 +25,10 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -31,11 +36,13 @@ import static org.mockito.Mockito.when;
 class ToolCallingServiceAgentContextTest {
 
     private CareReminderService careReminderService;
+    private ActionConfirmationRepository confirmationRepository;
     private ToolCallingService toolCallingService;
 
     @BeforeEach
     void setUp() {
         careReminderService = mock(CareReminderService.class);
+        confirmationRepository = mock(ActionConfirmationRepository.class);
 
         SpringAiTools tools = new SpringAiTools(
                 mock(WeatherService.class),
@@ -54,16 +61,22 @@ class ToolCallingServiceAgentContextTest {
                 mock(UserSessionService.class)
         );
 
-        toolCallingService = new ToolCallingService(
-                mock(LlmService.class),
+        ToolBroker toolBroker = new ToolBroker(
                 tools,
-                mock(WeatherService.class)
+                mock(WeatherService.class),
+                mock(ToolTraceRepository.class),
+                confirmationRepository,
+                1000
         );
+        toolCallingService = new ToolCallingService(mock(LlmService.class), toolBroker);
     }
 
     @Test
     void agentContextIsHiddenFromToolSchema() {
-        JSONArray schema = toolCallingService.buildToolsSchema(Set.of("completeCareReminder"));
+        JSONArray schema = toolCallingService.buildToolsSchema(
+                Set.of("completeCareReminder"),
+                new AgentContext("user-1", "conversation-1", "PET", 12L)
+        );
 
         JSONObject function = schema.getJSONObject(0).getJSONObject("function");
         JSONObject properties = function.getJSONObject("parameters").getJSONObject("properties");
@@ -75,12 +88,20 @@ class ToolCallingServiceAgentContextTest {
     }
 
     @Test
+    void brokerRegistersAllLegacyTools() {
+        assertEquals(22, toolCallingService.getRegisteredToolNames().size());
+    }
+
+    @Test
     void agentContextIsInjectedIntoToolExecution() {
         AgentContext context = new AgentContext(
                 "user-1",
                 "conversation-1",
                 "PET",
-                12L
+                12L,
+                Set.of(AgentContext.Permission.AGENT_WRITE),
+                1L,
+                null
         );
         when(careReminderService.completeLatestReminder("user-1")).thenReturn("提醒已完成");
 
@@ -92,5 +113,35 @@ class ToolCallingServiceAgentContextTest {
 
         assertTrue(result.contains("提醒已完成"));
         verify(careReminderService).completeLatestReminder("user-1");
+    }
+
+    @Test
+    void writeWithoutConfirmationCreatesPendingAction() {
+        AgentContext context = new AgentContext(
+                "user-1",
+                "conversation-1",
+                "PET",
+                12L
+        );
+        when(confirmationRepository.save(any())).thenAnswer(invocation -> {
+            ActionConfirmation confirmation = invocation.getArgument(0);
+            confirmation.setId(9L);
+            return confirmation;
+        });
+
+        JSONObject arguments = new JSONObject();
+        arguments.put("targetType", "PET");
+        arguments.put("targetId", 12L);
+        arguments.put("reminderType", "用药");
+        arguments.put("content", "给咪咪滴耳药");
+        arguments.put("dueAt", "2026-08-30 08:00");
+
+        String result = toolCallingService.executeTool("createCareReminder", arguments, context);
+
+        assertTrue(result.contains("[CONFIRMATION:9]"));
+        var captor = org.mockito.ArgumentCaptor.forClass(ActionConfirmation.class);
+        verify(confirmationRepository).save(captor.capture());
+        assertEquals(ActionConfirmation.Status.PENDING, captor.getValue().getStatus());
+        assertEquals("REMINDER_CREATE", captor.getValue().getActionType());
     }
 }

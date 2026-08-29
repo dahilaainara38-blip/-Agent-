@@ -31,7 +31,8 @@ public class SQLiteConfig {
             basePackages = {
                 "com.example.demo.chat.repository.mysql", "com.example.demo.care.repository",
                 "com.example.demo.push.repository", "com.example.demo.inventory.repository",
-                "com.example.demo.timeline.repository", "com.example.demo.community.repository"
+                    "com.example.demo.timeline.repository", "com.example.demo.community.repository"
+                    , "com.example.demo.agent.repository"
             },
             entityManagerFactoryRef = "entityManagerFactory",
             transactionManagerRef = "transactionManager"
@@ -78,6 +79,7 @@ public class SQLiteConfig {
                 "com.example.demo.chat.entity", "com.example.demo.care.model",
                 "com.example.demo.push.entity", "com.example.demo.inventory.entity",
                 "com.example.demo.timeline.entity", "com.example.demo.community.entity"
+                , "com.example.demo.agent.domain"
             );
             
             HibernateJpaVendorAdapter vendorAdapter = new HibernateJpaVendorAdapter();

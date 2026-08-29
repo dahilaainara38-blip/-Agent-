@@ -115,7 +115,7 @@ public class SpringAiTools {
     @Tool(name = "generateImage", description = "AI图片生成工具，根据文字描述生成图片。适用于需要创作插画、海报、概念图等场景。")
     public String generateImage(
             @ToolParam(description = "图片的文字描述，越详细越好，如：一只可爱的橘猫在阳光下的窗台上", required = true) String prompt,
-            @ToolParam(description = "图片风格，可选值：realistic（写实）、anime（动漫）、oil-painting（油画）、watercolor（水彩）") String style) {
+            @ToolParam(description = "图片风格，可选值：realistic（写实）、anime（动漫）、oil-painting（油画）、watercolor（水彩）", required = false) String style) {
         log.info("[Tool] generateImage called, prompt: {}, style: {}", prompt, style);
         try {
             JSONObject params = new JSONObject();
@@ -189,7 +189,7 @@ public class SpringAiTools {
             @ToolParam(description = "提醒类型：浇水、施肥、驱虫、疫苗、喂药、其他", required = true) String reminderType,
             @ToolParam(description = "提醒内容详情", required = true) String content,
             @ToolParam(description = "提醒时间，格式：yyyy-MM-dd HH:mm，如 2026-07-30 09:00", required = true) String dueAt,
-            @ToolParam(description = "重复规则：DAILY（每日）、WEEKLY（每周）、MONTHLY（每月），可留空") String repeatRule,
+            @ToolParam(description = "重复规则：DAILY（每日）、WEEKLY（每周）、MONTHLY（每月），可留空", required = false) String repeatRule,
             @AgentContextParam AgentContext context) {
         String userId = context.userId();
         log.info("[Tool] createCareReminder called, userId: {}, type: {}, reminder: {}", userId, targetType, reminderType);
@@ -234,8 +234,8 @@ public class SpringAiTools {
 
     @Tool(name = "queryPetCare", description = "查询宠物养护专业知识。覆盖：喂养指南、常见疾病症状和家庭处理、疫苗接种计划、品种特征、行为训练、日常护理。适用于猫、狗、仓鼠、兔子、鸟类、鱼类、爬宠等。")
     public String queryPetCare(
-            @ToolParam(description = "问题类型：feeding(喂养)/disease(疾病)/vaccine(疫苗)/breed(品种)/training(训练)/care(护理)/behavior(行为)/emergency(急救)/other(其他)") String queryType,
-            @ToolParam(description = "宠物类型，例如：猫、狗、仓鼠、兔子、鸟、鱼、乌龟") String petType,
+            @ToolParam(description = "问题类型：feeding(喂养)/disease(疾病)/vaccine(疫苗)/breed(品种)/training(训练)/care(护理)/behavior(行为)/emergency(急救)/other(其他)", required = false) String queryType,
+            @ToolParam(description = "宠物类型，例如：猫、狗、仓鼠、兔子、鸟、鱼、乌龟", required = false) String petType,
             @ToolParam(description = "用户的具体问题，例如：猫咪吐黄水怎么办、狗狗多大打疫苗", required = true) String question) {
         log.info("[Tool] queryPetCare called, type: {}, pet: {}, question: {}", queryType, petType, question);
         return petCareQueryService.queryPetCare(queryType, petType, question);
@@ -245,8 +245,8 @@ public class SpringAiTools {
 
     @Tool(name = "queryPlantSafety", description = "查询植物对宠物的毒性信息。覆盖：常见家养植物对猫/狗/兔子等的毒性、误食症状、应急处理、宠物友好型植物推荐。")
     public String queryPlantSafety(
-            @ToolParam(description = "问题类型：toxicity(毒性查询)/symptoms(误食症状)/emergency(应急处理)/safe_plants(安全植物推荐)/identify(植物识别)/other(其他)") String queryType,
-            @ToolParam(description = "植物名称，例如：百合、绿萝、龟背竹、滴水观音、郁金香") String plantName,
+            @ToolParam(description = "问题类型：toxicity(毒性查询)/symptoms(误食症状)/emergency(应急处理)/safe_plants(安全植物推荐)/identify(植物识别)/other(其他)", required = false) String queryType,
+            @ToolParam(description = "植物名称，例如：百合、绿萝、龟背竹、滴水观音、郁金香", required = false) String plantName,
             @ToolParam(description = "用户的具体问题，例如：百合对猫有毒吗、狗吃了绿萝会怎样", required = true) String question) {
         log.info("[Tool] queryPlantSafety called, type: {}, plant: {}, question: {}", queryType, plantName, question);
         return plantSafetyQueryService.queryPlantSafety(queryType, plantName, question);
@@ -257,7 +257,7 @@ public class SpringAiTools {
     @Tool(name = "queryFoodSafety", description = "查询某种食物猫狗是否能吃。给出安全等级、建议分量和中毒症状。误食危险食物时自动进入急症流程。")
     public String queryFoodSafety(
             @ToolParam(description = "食物名称，例如：巧克力、葡萄、洋葱、大蒜、牛奶", required = true) String foodName,
-            @ToolParam(description = "宠物类型，如：猫、狗，默认为猫") String petType) {
+            @ToolParam(description = "宠物类型，如：猫、狗，默认为猫", required = false) String petType) {
         log.info("[Tool] queryFoodSafety called, food: {}, pet: {}", foodName, petType);
         return petFoodSafetyService.queryFoodSafety(foodName, petType);
     }
@@ -267,8 +267,8 @@ public class SpringAiTools {
     @Tool(name = "triageSymptoms", description = "根据症状、持续时间、年龄判断紧急程度。输出'立即就医、24小时内就医、继续观察'。不替代兽医诊断。")
     public String triageSymptoms(
             @ToolParam(description = "症状描述，如：呼吸困难、抽搐、持续呕吐", required = true) String symptoms,
-            @ToolParam(description = "症状持续时间，如：2小时、1天") String duration,
-            @ToolParam(description = "宠物年龄，如：3个月、2岁") String age) {
+            @ToolParam(description = "症状持续时间，如：2小时、1天", required = false) String duration,
+            @ToolParam(description = "宠物年龄，如：3个月、2岁", required = false) String age) {
         log.info("[Tool] triageSymptoms called, symptoms: {}, duration: {}, age: {}", symptoms, duration, age);
         return careAdvancedService.triage(symptoms, duration, age);
     }
@@ -321,10 +321,10 @@ public class SpringAiTools {
     public String generateCarePlan(
             @ToolParam(description = "目标类型：pet（宠物）或 plant（植物）", required = true) String targetType,
             @ToolParam(description = "目标ID", required = true) Long targetId,
-            @ToolParam(description = "品种，如：金毛、英短、多肉、绿萝") String breed,
-            @ToolParam(description = "年龄，如：2岁、6个月") String age,
-            @ToolParam(description = "季节，如：春季、夏季、秋季、冬季") String season,
-            @ToolParam(description = "天气情况，如：高温、寒潮、晴朗") String weather,
+            @ToolParam(description = "品种，如：金毛、英短、多肉、绿萝", required = false) String breed,
+            @ToolParam(description = "年龄，如：2岁、6个月", required = false) String age,
+            @ToolParam(description = "季节，如：春季、夏季、秋季、冬季", required = false) String season,
+            @ToolParam(description = "天气情况，如：高温、寒潮、晴朗", required = false) String weather,
             @AgentContextParam AgentContext context) {
         String userId = context.userId();
         log.info("[Tool] generateCarePlan called, userId: {}, breed: {}", userId, breed);
@@ -348,7 +348,7 @@ public class SpringAiTools {
 
     @Tool(name = "searchNearbyService", description = "查找附近宠物医院、急诊、植物医院和园艺店。返回结果末尾有【必须保留的导航链接】段落，你必须原样输出这些URL链接，绝对不能省略、改写或总结它们。")
     public String searchNearbyService(
-            @ToolParam(description = "服务类型：hospital(宠物医院)/emergency(24小时急诊)/clinic(诊所)/plant_hospital(植物医院)/gardening(园艺店)/pet_shop(宠物店)/grooming(美容)") String serviceType,
+            @ToolParam(description = "服务类型：hospital(宠物医院)/emergency(24小时急诊)/clinic(诊所)/plant_hospital(植物医院)/gardening(园艺店)/pet_shop(宠物店)/grooming(美容)", required = false) String serviceType,
             @ToolParam(description = "位置，如：北京市朝阳区", required = true) String location) {
         log.info("[Tool] searchNearbyService called, type: {}, location: {}", serviceType, location);
         return nearbyServiceSearchService.searchNearbyService(serviceType, location);
