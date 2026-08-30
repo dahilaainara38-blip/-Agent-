@@ -67,6 +67,12 @@ public class AgentRuntimeController {
         return ResponseEntity.ok(toolBroker.metadata());
     }
 
+    @GetMapping("/traces/{conversationId}")
+    public ResponseEntity<List<Map<String, Object>>> traces(@PathVariable String conversationId,
+                                                            HttpSession session) {
+        return ResponseEntity.ok(agentRuntimeService.traces(conversationId, session));
+    }
+
     @PostMapping("/artifacts")
     public ResponseEntity<Map<String, Object>> upload(@RequestParam("file") MultipartFile file,
                                                       HttpSession session) {

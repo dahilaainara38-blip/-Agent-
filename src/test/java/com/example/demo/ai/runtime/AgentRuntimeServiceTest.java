@@ -3,7 +3,10 @@ package com.example.demo.ai.runtime;
 import com.example.demo.agent.domain.ActionConfirmation;
 import com.example.demo.agent.domain.AgentConversation;
 import com.example.demo.agent.domain.CareSubject;
+import com.example.demo.agent.domain.ToolTrace;
+import com.example.demo.agent.repository.AgentConversationRepository;
 import com.example.demo.agent.repository.CareEventRepository;
+import com.example.demo.agent.repository.ToolTraceRepository;
 import com.example.demo.agent.service.ActionConfirmationService;
 import com.example.demo.agent.service.AgentConversationService;
 import com.example.demo.agent.service.AgentMemoryService;
@@ -20,6 +23,7 @@ import org.springframework.mock.web.MockHttpSession;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -38,6 +42,8 @@ class AgentRuntimeServiceTest {
     private SubjectDirectoryService subjectDirectory;
     private ActionConfirmationService confirmationService;
     private AgentMemoryService memoryService;
+    private AgentConversationRepository conversationRepository;
+    private ToolTraceRepository traceRepository;
     private AgentRuntimeService runtimeService;
     private MockHttpSession session;
 
@@ -50,6 +56,8 @@ class AgentRuntimeServiceTest {
         confirmationService = mock(ActionConfirmationService.class);
         memoryService = mock(AgentMemoryService.class);
         CareEventRepository careEventRepository = mock(CareEventRepository.class);
+        conversationRepository = mock(AgentConversationRepository.class);
+        traceRepository = mock(ToolTraceRepository.class);
         runtimeService = new AgentRuntimeService(
                 toolCallingService,
                 conversationService,
@@ -58,6 +66,8 @@ class AgentRuntimeServiceTest {
                 confirmationService,
                 memoryService,
                 careEventRepository,
+                conversationRepository,
+                traceRepository,
                 true,
                 10
         );
@@ -164,10 +174,33 @@ class AgentRuntimeServiceTest {
     }
 
     @Test
+    void tracesExposeOwnedConversationHistoryOnly() {
+        when(conversationRepository.findByConversationIdAndUserId("agent_1", "user-1"))
+                .thenReturn(Optional.of(AgentConversation.builder()
+                        .conversationId("agent_1").userId("user-1").build()));
+        when(traceRepository.findByConversationIdOrderByCreatedAtDesc("agent_1"))
+                .thenReturn(List.of(ToolTrace.builder()
+                        .traceId("trace-1").conversationId("agent_1").userId("user-1")
+                        .toolName("getWeather").accessMode("READ").status("SUCCESS")
+                        .durationMs(12).argumentsJson("{\"city\":\"北京\"}").resultJson("晴").build()));
+
+        List<Map<String, Object>> traces = runtimeService.traces("agent_1", session);
+
+        assertEquals(1, traces.size());
+        assertEquals("getWeather", traces.get(0).get("toolName"));
+        assertEquals("SUCCESS", traces.get(0).get("status"));
+
+        when(conversationRepository.findByConversationIdAndUserId("agent_other", "user-1"))
+                .thenReturn(Optional.empty());
+        assertThrows(IllegalArgumentException.class, () -> runtimeService.traces("agent_other", session));
+    }
+
+    @Test
     void chatRejectsDisabledRuntime() {
         AgentRuntimeService disabled = new AgentRuntimeService(
                 toolCallingService, conversationService, subjectDirectory, mock(ArtifactService.class),
-                confirmationService, memoryService, mock(CareEventRepository.class), false, 10
+                confirmationService, memoryService, mock(CareEventRepository.class),
+                conversationRepository, traceRepository, false, 10
         );
 
         IllegalStateException error = assertThrows(IllegalStateException.class, () -> disabled.chat(

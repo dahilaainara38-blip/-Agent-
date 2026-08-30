@@ -49,6 +49,17 @@ class AgentRuntimeControllerIntegrationTest {
     }
 
     @Test
+    void tracesRequireAuthenticationAndOwnedConversation() throws Exception {
+        mockMvc.perform(get("/api/agent/traces/agent_1"))
+                .andExpect(status().isUnauthorized());
+
+        MockHttpSession session = authenticated();
+        mockMvc.perform(get("/api/agent/traces/agent_other").session(session))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("会话不存在或不属于当前用户"));
+    }
+
+    @Test
     void authenticatedSessionCanCreateConversationAndStoreArtifact() throws Exception {
         MockHttpSession session = authenticated();
 

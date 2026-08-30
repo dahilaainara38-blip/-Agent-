@@ -5,7 +5,10 @@ import com.alibaba.fastjson2.JSONObject;
 import com.example.demo.agent.domain.AgentMessage;
 import com.example.demo.agent.domain.Artifact;
 import com.example.demo.agent.domain.CareSubject;
+import com.example.demo.agent.domain.ToolTrace;
+import com.example.demo.agent.repository.AgentConversationRepository;
 import com.example.demo.agent.repository.CareEventRepository;
+import com.example.demo.agent.repository.ToolTraceRepository;
 import com.example.demo.agent.service.ActionConfirmationService;
 import com.example.demo.agent.service.AgentConversationService;
 import com.example.demo.agent.service.AgentMemoryService;
@@ -19,7 +22,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Service
@@ -32,6 +37,8 @@ public class AgentRuntimeService {
     private final ActionConfirmationService confirmationService;
     private final AgentMemoryService memoryService;
     private final CareEventRepository careEventRepository;
+    private final AgentConversationRepository conversationRepository;
+    private final ToolTraceRepository traceRepository;
     private final boolean runtimeEnabled;
     private final int historyLimit;
 
@@ -42,6 +49,8 @@ public class AgentRuntimeService {
                                ActionConfirmationService confirmationService,
                                AgentMemoryService memoryService,
                                CareEventRepository careEventRepository,
+                               AgentConversationRepository conversationRepository,
+                               ToolTraceRepository traceRepository,
                                @Value("${agent.runtime.enabled:false}") boolean runtimeEnabled,
                                @Value("${agent.memory.max-messages:10}") int historyLimit) {
         this.toolCallingService = toolCallingService;
@@ -51,6 +60,8 @@ public class AgentRuntimeService {
         this.confirmationService = confirmationService;
         this.memoryService = memoryService;
         this.careEventRepository = careEventRepository;
+        this.conversationRepository = conversationRepository;
+        this.traceRepository = traceRepository;
         this.runtimeEnabled = runtimeEnabled;
         this.historyLimit = historyLimit;
     }
@@ -110,6 +121,42 @@ public class AgentRuntimeService {
     public List<CareSubject> subjects(HttpSession session) {
         requireEnabled();
         return subjectDirectory.subjects(currentUser(session));
+    }
+
+    /** 当前用户某会话的工具调用轨迹，用于排查 Agent 的每一步决策。 */
+    public List<Map<String, Object>> traces(String conversationId, HttpSession session) {
+        requireEnabled();
+        String userId = currentUser(session);
+        if (conversationId == null || conversationId.isBlank()) {
+            throw new IllegalArgumentException("缺少会话 ID");
+        }
+        conversationRepository.findByConversationIdAndUserId(conversationId.trim(), userId)
+                .orElseThrow(() -> new IllegalArgumentException("会话不存在或不属于当前用户"));
+        return traceRepository.findByConversationIdOrderByCreatedAtDesc(conversationId.trim()).stream()
+                .map(this::traceItem)
+                .toList();
+    }
+
+    private Map<String, Object> traceItem(ToolTrace trace) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("id", trace.getId());
+        item.put("traceId", trace.getTraceId());
+        item.put("toolName", trace.getToolName());
+        item.put("accessMode", trace.getAccessMode());
+        item.put("status", trace.getStatus());
+        item.put("durationMs", trace.getDurationMs());
+        item.put("arguments", trace.getArgumentsJson());
+        item.put("result", abbreviate(trace.getResultJson(), 2000));
+        item.put("errorMessage", trace.getErrorMessage());
+        item.put("createdAt", trace.getCreatedAt());
+        return item;
+    }
+
+    private String abbreviate(String value, int maxLength) {
+        if (value == null || value.length() <= maxLength) {
+            return value;
+        }
+        return value.substring(0, maxLength) + "...[truncated]";
     }
 
     public String newConversation(HttpSession session) {
