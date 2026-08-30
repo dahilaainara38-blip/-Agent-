@@ -31,7 +31,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -354,15 +353,6 @@ public class ToolBroker {
     private String description(ToolInfo info) {
         return info.annotation.description().isBlank()
                 ? info.method.getName() : info.annotation.description();
-    }
-
-    public List<String> validateToolNames(List<String> requestedTools) {
-        if (requestedTools == null || requestedTools.isEmpty()) {
-            return new ArrayList<>(toolRegistry.keySet());
-        }
-        return requestedTools.stream()
-                .filter(toolRegistry::containsKey)
-                .collect(Collectors.toList());
     }
 
     @PreDestroy

@@ -41,49 +41,9 @@ public class ToolCallingService {
         return toolBroker.registeredToolNames();
     }
 
-    public JSONArray buildToolsSchema() {
-        return buildToolsSchema(null);
-    }
-
-    public JSONArray buildToolsSchema(Set<String> allowedToolNames) {
-        return toolBroker.buildSchema(allowedToolNames, AgentContext.anonymous());
-    }
-
     public JSONArray buildToolsSchema(Set<String> allowedToolNames, AgentContext context) {
         return toolBroker.buildSchema(allowedToolNames,
                 context == null ? AgentContext.anonymous() : context);
-    }
-
-    public ToolCallResponse chatWithTools(String systemPrompt, String userMessage) {
-        return chatWithTools(systemPrompt, userMessage, null);
-    }
-
-    public ToolCallResponse chatWithTools(String systemPrompt, String userMessage,
-                                           Set<String> allowedToolNames) {
-        return chatWithTools(systemPrompt, userMessage, allowedToolNames, AgentContext.anonymous());
-    }
-
-    public ToolCallResponse chatWithTools(String systemPrompt, String userMessage,
-                                           Set<String> allowedToolNames, AgentContext context) {
-        String traceId = UUID.randomUUID().toString().substring(0, 8);
-        log.info("[Trace:{}] Tool chat started, message length: {}",
-                traceId, userMessage.length());
-
-        JSONArray messages = new JSONArray();
-
-        if (systemPrompt != null && !systemPrompt.isEmpty()) {
-            JSONObject systemMsg = new JSONObject();
-            systemMsg.put("role", "system");
-            systemMsg.put("content", systemPrompt);
-            messages.add(systemMsg);
-        }
-
-        JSONObject userMsg = new JSONObject();
-        userMsg.put("role", "user");
-        userMsg.put("content", userMessage);
-        messages.add(userMsg);
-
-        return executeToolLoop(messages, allowedToolNames, traceId, context);
     }
 
     public ToolCallResponse chatWithMessages(JSONArray messages,
@@ -352,10 +312,6 @@ public class ToolCallingService {
         }
     }
 
-    public String executeTool(String toolName, JSONObject arguments) {
-        return executeTool(toolName, arguments, AgentContext.anonymous());
-    }
-
     public String executeTool(String toolName, JSONObject arguments, AgentContext context) {
         return toolBroker.execute(toolName, arguments, null, context);
     }
@@ -382,10 +338,6 @@ public class ToolCallingService {
         }
 
         return files;
-    }
-
-    public List<String> validateToolNames(List<String> requestedTools) {
-        return toolBroker.validateToolNames(requestedTools);
     }
 
     @PreDestroy
