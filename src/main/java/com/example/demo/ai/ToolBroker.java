@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -61,15 +62,19 @@ public class ToolBroker {
     private final ActionConfirmationRepository confirmationRepository;
     private final ExecutorService executor;
     private final long timeoutMs;
+    private final long userCallsPerMinute;
+    private final ConcurrentHashMap<String, UserWindow> userWindows = new ConcurrentHashMap<>();
 
     public ToolBroker(SpringAiTools springAiTools,
                       WeatherService weatherService,
                       ToolTraceRepository toolTraceRepository,
                       ActionConfirmationRepository confirmationRepository,
-                      @Value("${agent.tools.timeout-ms:8000}") long timeoutMs) {
+                      @Value("${agent.tools.timeout-ms:8000}") long timeoutMs,
+                      @Value("${agent.tools.user-calls-per-minute:30}") long userCallsPerMinute) {
         this.toolTraceRepository = toolTraceRepository;
         this.confirmationRepository = confirmationRepository;
         this.timeoutMs = timeoutMs;
+        this.userCallsPerMinute = userCallsPerMinute;
         this.executor = Executors.newFixedThreadPool(
                 Math.min(Runtime.getRuntime().availableProcessors(), 4),
                 task -> {
@@ -184,6 +189,7 @@ public class ToolBroker {
         if (IDENTITY_TOOLS.contains(toolName) && !context.authenticated()) {
             throw new IllegalArgumentException("请先登录后再使用该工具");
         }
+        checkRateLimit(toolName, arguments, traceId, context);
 
         validateArguments(toolName, info.method, arguments);
         long startedAt = System.currentTimeMillis();
@@ -223,6 +229,37 @@ public class ToolBroker {
     private Throwable unwrap(Throwable throwable) {
         Throwable cause = throwable.getCause();
         return cause == null ? throwable : cause;
+    }
+
+    /** 固定窗口限流：同一用户每分钟最多 userCallsPerMinute 次工具调用，0 表示关闭。 */
+    private void checkRateLimit(String toolName, JSONObject arguments, String traceId, AgentContext context) {
+        if (userCallsPerMinute <= 0 || context.userId() == null || context.userId().isBlank()) {
+            return;
+        }
+        long currentMinute = System.currentTimeMillis() / 60_000;
+        UserWindow window = userWindows.compute(context.userId(),
+                (user, old) -> old != null && old.minute == currentMinute ? old : new UserWindow(currentMinute));
+        long count;
+        synchronized (window) {
+            window.count++;
+            count = window.count;
+        }
+        if (count <= userCallsPerMinute) {
+            return;
+        }
+        String message = "工具调用过于频繁（每分钟上限 " + userCallsPerMinute + " 次），请稍后再试";
+        audit(traceId, context, toolName, accessMode(toolName), "RATE_LIMITED",
+                sanitize(arguments).toJSONString(), null, message, 0);
+        throw new IllegalStateException(message);
+    }
+
+    private static final class UserWindow {
+        final long minute;
+        long count;
+
+        UserWindow(long minute) {
+            this.minute = minute;
+        }
     }
 
     private void validateArguments(String toolName, Method method, JSONObject arguments) {

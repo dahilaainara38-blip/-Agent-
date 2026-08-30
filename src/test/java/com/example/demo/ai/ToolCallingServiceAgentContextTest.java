@@ -70,7 +70,8 @@ class ToolCallingServiceAgentContextTest {
                 mock(WeatherService.class),
                 mock(ToolTraceRepository.class),
                 confirmationRepository,
-                1000
+                1000,
+                0
         );
         toolCallingService = new ToolCallingService(mock(LlmService.class), toolBroker);
     }
