@@ -6,6 +6,7 @@ import com.alibaba.fastjson2.JSONObject;
 import com.example.demo.config.DashScopeConfig;
 import com.example.demo.utils.JsonUtils;
 import org.apache.hc.client5.http.classic.methods.HttpPost;
+import org.apache.hc.client5.http.config.RequestConfig;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpResponse;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
@@ -13,8 +14,10 @@ import org.apache.hc.core5.http.ContentType;
 import org.apache.hc.core5.http.HttpEntity;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.apache.hc.core5.http.io.entity.StringEntity;
+import org.apache.hc.core5.util.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -31,10 +34,26 @@ public class LlmService {
 
     private final DashScopeConfig config;
     private final CloseableHttpClient httpClient;
+    private final int maxAttempts;
+    private final long retryBackoffMs;
 
-    public LlmService(DashScopeConfig config) {
+    public LlmService(DashScopeConfig config,
+                      @Value("${agent.llm.connect-timeout-ms:5000}") long connectTimeoutMs,
+                      @Value("${agent.llm.read-timeout-ms:60000}") long readTimeoutMs,
+                      @Value("${agent.llm.max-attempts:2}") int maxAttempts,
+                      @Value("${agent.llm.retry-backoff-ms:500}") long retryBackoffMs) {
         this.config = config;
-        this.httpClient = HttpClients.createDefault();
+        this.maxAttempts = Math.max(1, maxAttempts);
+        this.retryBackoffMs = Math.max(0, retryBackoffMs);
+        RequestConfig requestConfig = RequestConfig.custom()
+                .setConnectTimeout(Timeout.ofMilliseconds(connectTimeoutMs))
+                .setConnectionRequestTimeout(Timeout.ofMilliseconds(connectTimeoutMs))
+                .setResponseTimeout(Timeout.ofMilliseconds(readTimeoutMs))
+                .build();
+        this.httpClient = HttpClients.custom()
+                .disableAutomaticRetries()
+                .setDefaultRequestConfig(requestConfig)
+                .build();
     }
 
     public String chat(String userMessage) throws IOException {
@@ -72,6 +91,36 @@ public class LlmService {
     public JSONObject executeChatRequestWithResponse(JSONObject requestBody) throws IOException {
         String jsonRequest = JSON.toJSONString(requestBody);
 
+        for (int attempt = 1; ; attempt++) {
+            RawResponse raw = doPost(jsonRequest);
+            logger.info("LLM API response status: {}, attempt: {}/{}", raw.status(), attempt, maxAttempts);
+
+            if (raw.status() == 200) {
+                try {
+                    return JSON.parseObject(raw.body());
+                } catch (Exception e) {
+                    throw new IOException("Failed to parse LLM response", e);
+                }
+            }
+
+            if (!isRetryable(raw.status()) || attempt >= maxAttempts) {
+                throw new IOException("LLM API request failed with status: " + raw.status()
+                        + ", body: " + raw.body());
+            }
+
+            long backoff = retryBackoffMs * attempt;
+            logger.warn("LLM API retryable status {}, backing off {}ms (attempt {}/{})",
+                    raw.status(), backoff, attempt, maxAttempts);
+            try {
+                Thread.sleep(backoff);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("LLM request interrupted", e);
+            }
+        }
+    }
+
+    private RawResponse doPost(String jsonRequest) throws IOException {
         HttpPost httpPost = new HttpPost(config.getBaseUrl() + "/chat/completions");
         httpPost.setHeader("Content-Type", "application/json");
         httpPost.setHeader("Authorization", "Bearer " + config.getApiKey());
@@ -79,21 +128,18 @@ public class LlmService {
 
         try (CloseableHttpResponse response = httpClient.execute(httpPost)) {
             HttpEntity entity = response.getEntity();
-            String responseBody = "";
-            if (entity != null) {
-                responseBody = EntityUtils.toString(entity, "UTF-8");
-            }
-
-            logger.info("LLM API response status: {}, body: {}", response.getCode(), responseBody);
-
-            if (response.getCode() != 200) {
-                throw new IOException("LLM API request failed with status: " + response.getCode() + ", body: " + responseBody);
-            }
-
-            return JSON.parseObject(responseBody);
+            String responseBody = entity != null ? EntityUtils.toString(entity, "UTF-8") : "";
+            return new RawResponse(response.getCode(), responseBody);
         } catch (org.apache.hc.core5.http.ParseException e) {
             throw new IOException("Failed to parse LLM response", e);
         }
+    }
+
+    private static boolean isRetryable(int status) {
+        return status == 429 || status >= 500;
+    }
+
+    private record RawResponse(int status, String body) {
     }
 
     public JSONObject chatWithTools(JSONArray messages, JSONArray tools) throws IOException {
