@@ -94,7 +94,7 @@ class ToolCallingServiceAgentContextTest {
 
     @Test
     void brokerRegistersAllLegacyTools() {
-        assertEquals(22, toolCallingService.getRegisteredToolNames().size());
+        assertEquals(23, toolCallingService.getRegisteredToolNames().size());
     }
 
     @Test
@@ -148,5 +148,33 @@ class ToolCallingServiceAgentContextTest {
         verify(confirmationRepository).save(captor.capture());
         assertEquals(ActionConfirmation.Status.PENDING, captor.getValue().getStatus());
         assertEquals("REMINDER_CREATE", captor.getValue().getActionType());
+    }
+
+    @Test
+    void saveDiagnosisIsBrokeredWriteAndCreatesConfirmation() {
+        AgentContext context = new AgentContext(
+                "user-1",
+                "conversation-1",
+                "PET",
+                12L
+        );
+        when(confirmationRepository.save(any())).thenAnswer(invocation -> {
+            ActionConfirmation confirmation = invocation.getArgument(0);
+            confirmation.setId(9L);
+            return confirmation;
+        });
+
+        JSONObject arguments = new JSONObject();
+        arguments.put("type", "plant");
+        arguments.put("diseaseName", "白粉病");
+        arguments.put("confidence", "HIGH");
+
+        String result = toolCallingService.executeTool("saveDiagnosis", arguments, context);
+
+        assertTrue(result.contains("[CONFIRMATION:9]"));
+        var captor = org.mockito.ArgumentCaptor.forClass(ActionConfirmation.class);
+        verify(confirmationRepository).save(captor.capture());
+        assertEquals(ActionConfirmation.Status.PENDING, captor.getValue().getStatus());
+        assertEquals("DIAGNOSIS_SAVE", captor.getValue().getActionType());
     }
 }

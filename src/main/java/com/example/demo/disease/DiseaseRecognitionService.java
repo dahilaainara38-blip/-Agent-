@@ -51,7 +51,7 @@ public class DiseaseRecognitionService {
             "常见宠物皮肤问题参考：猫癣（圆形脱毛斑、皮屑、瘙痒）、蠕形螨（脱毛、红斑、色素沉着）、过敏性皮炎（瘙痒、红斑、抓痕）、湿疹（红肿、渗液）、跳蚤过敏性皮炎（尾根部丘疹）、细菌性皮炎（脓疱、结痂）。\n" +
             "注意：这是AI辅助识别，不能替代兽医诊断，请明确告知用户这一点。";
 
-    public DiseaseResult diagnose(byte[] imageBytes, String type, String userId, Long targetId) throws IOException {
+    public DiseaseResult diagnose(byte[] imageBytes, String type, String userId) throws IOException {
         String prompt = "plant".equalsIgnoreCase(type) ? PLANT_PROMPT : PET_PROMPT;
 
         logger.info("Disease diagnosis request, type: {}, userId: {}", type, userId);
@@ -59,20 +59,22 @@ public class DiseaseRecognitionService {
         String aiResponse = visionService.analyzeImageWithCustomPrompt(imageBytes, prompt);
         logger.info("AI disease diagnosis response received, length: {}", aiResponse != null ? aiResponse.length() : 0);
 
-        DiseaseResult result = parseDiseaseResult(aiResponse);
+        return parseDiseaseResult(aiResponse);
+    }
 
+    /** 诊断历史写入：仅由显式保存动作调用（诊断页按钮或 agent 确认卡），diagnose 本身不落库。 */
+    public IdentifyHistory saveHistory(String userId, Long targetId, String type, String resultJson) {
         IdentifyHistory history = IdentifyHistory.builder()
                 .userId(userId)
                 .targetId(targetId)
                 .identifyType("DISEASE")
-                .result(JSON.toJSONString(result))
+                .result(resultJson)
                 .imageUrl(null)
                 .metadata(JSON.toJSONString(new JSONObject().fluentPut("type", type)))
                 .build();
-        identifyHistoryRepository.save(history);
+        IdentifyHistory saved = identifyHistoryRepository.save(history);
         logger.info("Disease diagnosis history saved for user: {}", userId);
-
-        return result;
+        return saved;
     }
 
     private DiseaseResult parseDiseaseResult(String aiResponse) {

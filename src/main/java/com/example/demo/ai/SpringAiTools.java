@@ -395,7 +395,7 @@ public class SpringAiTools {
             byte[] imageBytes = context.artifactId() != null && !context.artifactId().isBlank()
                     ? artifactService.readOwnedBytes(context.artifactId(), userId)
                     : Base64.getDecoder().decode(userSessionService.getPendingImageBase64(userId));
-            DiseaseResult result = diseaseRecognitionService.diagnose(imageBytes, type, userId, null);
+            DiseaseResult result = diseaseRecognitionService.diagnose(imageBytes, type, userId);
 
             StringBuilder sb = new StringBuilder();
             sb.append("【病害诊断结果】\n\n");
@@ -406,12 +406,39 @@ public class SpringAiTools {
             sb.append("预防建议：").append(defaultIfEmpty(result.getPrevention())).append("\n");
             sb.append("紧急程度：").append(defaultIfEmpty(result.getUrgencyLevel())).append("\n");
             sb.append("\n注意：AI辅助诊断不能替代专业医生/兽医诊断，严重情况请及时就医。");
+            sb.append("\n（本次诊断尚未保存，如需存入诊断历史请告诉我，我会在你确认后保存。）");
 
             return sb.toString();
         } catch (Exception e) {
             log.error("[Tool] diagnoseDisease error: {}", e.getMessage(), e);
             return "病害诊断失败：" + e.getMessage();
         }
+    }
+
+    @Tool(name = "saveDiagnosis", description = "把已完成的病害/皮肤诊断结果保存到诊断历史，便于回看与前后对比。属于写操作，需要用户确认后执行。")
+    public String saveDiagnosis(
+            @ToolParam(description = "诊断类型：plant（植物病虫害）或 pet（宠物皮肤病）", required = true) String type,
+            @ToolParam(description = "病害/皮肤问题名称", required = true) String diseaseName,
+            @ToolParam(description = "置信度：HIGH/MEDIUM/LOW", required = false) String confidence,
+            @ToolParam(description = "症状摘要", required = false) String symptoms,
+            @ToolParam(description = "治疗方案摘要", required = false) String treatmentPlan,
+            @ToolParam(description = "紧急程度：IMMEDIATE/24H/OBSERVE", required = false) String urgencyLevel,
+            @AgentContextParam AgentContext context) {
+        String userId = context.userId();
+        log.info("[Tool] saveDiagnosis called, userId: {}, type: {}, disease: {}", userId, type, diseaseName);
+        if (userId == null || userId.isBlank()) {
+            return "请先登录后再保存诊断记录。";
+        }
+
+        JSONObject payload = new JSONObject();
+        payload.put("diseaseName", diseaseName);
+        payload.put("confidence", confidence);
+        payload.put("symptoms", symptoms);
+        payload.put("treatmentPlan", treatmentPlan);
+        payload.put("prevention", null);
+        payload.put("urgencyLevel", urgencyLevel);
+        diseaseRecognitionService.saveHistory(userId, null, type, payload.toJSONString());
+        return "诊断已保存到历史记录，可在诊断历史中回看。";
     }
 
     private String defaultIfEmpty(String value) {

@@ -1,5 +1,6 @@
 package com.example.demo.disease;
 
+import com.alibaba.fastjson2.JSON;
 import com.example.demo.aicare.Result;
 import com.example.demo.care.model.IdentifyHistory;
 import com.example.demo.care.repository.IdentifyHistoryRepository;
@@ -45,7 +46,9 @@ public class DiseaseController {
 
         try {
             byte[] imageBytes = file.getBytes();
-            DiseaseResult result = diseaseRecognitionService.diagnose(imageBytes, type, userName, null);
+            DiseaseResult result = diseaseRecognitionService.diagnose(imageBytes, type, userName);
+            // 诊断页的显式动作：诊断后直接保存历史（agent 工具路径须经 saveDiagnosis 确认卡）
+            diseaseRecognitionService.saveHistory(userName, null, type, JSON.toJSONString(result));
             return Result.success(result);
         } catch (IOException e) {
             logger.error("Disease diagnosis failed", e);

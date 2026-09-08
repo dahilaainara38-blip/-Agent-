@@ -41,13 +41,13 @@ public class ToolBroker {
 
     private static final Set<String> WRITE_TOOLS = Set.of(
             "createCareReminder", "completeCareReminder", "saveMedication",
-            "generateCarePlan", "generateImage", "editImage"
+            "generateCarePlan", "generateImage", "editImage", "saveDiagnosis"
     );
 
     private static final Set<String> IDENTITY_TOOLS = Set.of(
             "analyzeImage", "editImage", "createCareReminder", "completeCareReminder",
             "listCareReminders", "saveMedication", "checkMedication",
-            "compareImages", "generateCarePlan", "diagnoseDisease"
+            "compareImages", "generateCarePlan", "diagnoseDisease", "saveDiagnosis"
     );
 
     private static final Map<String, String> ACTION_TYPES = Map.of(
@@ -56,7 +56,8 @@ public class ToolBroker {
             "saveMedication", "MEDICATION_SAVE",
             "generateCarePlan", "CARE_PLAN_GENERATE",
             "generateImage", "IMAGE_GENERATE",
-            "editImage", "IMAGE_EDIT"
+            "editImage", "IMAGE_EDIT",
+            "saveDiagnosis", "DIAGNOSIS_SAVE"
     );
 
     private final Map<String, ToolInfo> toolRegistry = new LinkedHashMap<>();
