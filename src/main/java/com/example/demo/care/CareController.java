@@ -1,5 +1,6 @@
 package com.example.demo.care;
 
+import com.example.demo.agent.service.CareEventRecorder;
 import com.example.demo.aicare.Result;
 import com.example.demo.ai.runtime.CareQaCompatibilityService;
 import com.example.demo.chat.entity.CareRecord;
@@ -30,22 +31,35 @@ public class CareController {
     private final PetProfileRepository petProfileRepository;
     private final LegacyCareRecordRepository careRecordRepository;
     private final CareQaCompatibilityService careQaCompatibilityService;
+    private final CareEventRecorder careEventRecorder;
 
     public CareController(VisionService visionService, LlmService llmService,
                           PlantProfileRepository plantProfileRepository,
                           PetProfileRepository petProfileRepository,
                           LegacyCareRecordRepository careRecordRepository,
-                          CareQaCompatibilityService careQaCompatibilityService) {
+                          CareQaCompatibilityService careQaCompatibilityService,
+                          CareEventRecorder careEventRecorder) {
         this.visionService = visionService;
         this.llmService = llmService;
         this.plantProfileRepository = plantProfileRepository;
         this.petProfileRepository = petProfileRepository;
         this.careRecordRepository = careRecordRepository;
         this.careQaCompatibilityService = careQaCompatibilityService;
+        this.careEventRecorder = careEventRecorder;
+    }
+
+    private String currentUser(HttpSession session) {
+        String userName = (String) session.getAttribute("user");
+        return userName == null || userName.isBlank() ? null : userName;
     }
 
     @PostMapping("/identify")
-    public Result<Map<String, Object>> identify(@RequestBody Map<String, String> params) {
+    public Result<Map<String, Object>> identify(@RequestBody Map<String, String> params,
+                                                HttpSession session) {
+        String user = currentUser(session);
+        if (user == null) {
+            return Result.error("未登录");
+        }
         String type = params.get("type");
         String imageBase64 = params.get("image");
 
@@ -72,8 +86,8 @@ public class CareController {
 
     @GetMapping("/targets/{type}")
     public Result<List<Object>> getTargets(@PathVariable String type, HttpSession session) {
-        String userName = (String) session.getAttribute("user");
-        if (userName == null) {
+        String user = currentUser(session);
+        if (user == null) {
             return Result.error("未登录");
         }
 
@@ -102,23 +116,35 @@ public class CareController {
     }
 
     @PostMapping("/targets/{type}")
-    public Result<String> createTarget(@PathVariable String type, @RequestBody Map<String, Object> params) {
+    public Result<String> createTarget(@PathVariable String type, @RequestBody Map<String, Object> params,
+                                       HttpSession session) {
+        String user = currentUser(session);
+        if (user == null) {
+            return Result.error("未登录");
+        }
         String name = (String) params.get("name");
         String species = (String) params.get("species");
 
         if ("PLANT".equalsIgnoreCase(type)) {
-            PlantProfile plant = new PlantProfile(name, species, null, null);
-            plantProfileRepository.save(plant);
+            PlantProfile plant = plantProfileRepository.save(new PlantProfile(name, species, null, null));
+            recordTargetEvent(user, "PLANT", plant.getId(), "TARGET_CREATE", name, species);
         } else if ("PET".equalsIgnoreCase(type)) {
-            PetProfile pet = new PetProfile(name, species, null, null);
-            petProfileRepository.save(pet);
+            PetProfile pet = petProfileRepository.save(new PetProfile(name, species, null, null));
+            recordTargetEvent(user, "PET", pet.getId(), "TARGET_CREATE", name, species);
         }
 
         return Result.success("保存成功");
     }
 
     @DeleteMapping("/targets/{type}/{id}")
-    public Result<String> deleteTarget(@PathVariable String type, @PathVariable Long id) {
+    public Result<String> deleteTarget(@PathVariable String type, @PathVariable Long id,
+                                       HttpSession session) {
+        String user = currentUser(session);
+        if (user == null) {
+            return Result.error("未登录");
+        }
+        String subjectType = "PLANT".equalsIgnoreCase(type) ? "PLANT" : "PET";
+
         if ("PLANT".equalsIgnoreCase(type)) {
             plantProfileRepository.deleteById(id);
             careRecordRepository.deleteByTargetTypeAndTargetId("PLANT", id);
@@ -127,13 +153,21 @@ public class CareController {
             careRecordRepository.deleteByTargetTypeAndTargetId("PET", id);
         }
 
+        careEventRecorder.record(user, subjectType, id, "TARGET_DELETE",
+                Map.of("targetType", subjectType, "targetId", id),
+                "REST", "rest_target_delete_" + subjectType.toLowerCase() + "_" + id);
         return Result.success("删除成功");
     }
 
     @GetMapping("/records/{type}/{targetId}")
-    public Result<List<Map<String, Object>>> getRecords(@PathVariable String type, @PathVariable Long targetId) {
+    public Result<List<Map<String, Object>>> getRecords(@PathVariable String type, @PathVariable Long targetId,
+                                                        HttpSession session) {
+        String user = currentUser(session);
+        if (user == null) {
+            return Result.error("未登录");
+        }
         List<CareRecord> records = careRecordRepository.findByTargetTypeAndTargetIdOrderByCreatedAtDesc(type, targetId);
-        
+
         List<Map<String, Object>> result = new ArrayList<>();
         for (CareRecord record : records) {
             Map<String, Object> map = new HashMap<>();
@@ -148,16 +182,34 @@ public class CareController {
     }
 
     @PostMapping("/records")
-    public Result<String> createRecord(@RequestBody Map<String, Object> params) {
+    public Result<String> createRecord(@RequestBody Map<String, Object> params, HttpSession session) {
+        String user = currentUser(session);
+        if (user == null) {
+            return Result.error("未登录");
+        }
         String targetType = (String) params.get("targetType");
         Long targetId = ((Number) params.get("targetId")).longValue();
         String recordType = (String) params.get("recordType");
         String content = (String) params.get("content");
 
-        CareRecord record = new CareRecord(targetType, targetId, recordType, content);
-        careRecordRepository.save(record);
+        CareRecord record = careRecordRepository.save(new CareRecord(targetType, targetId, recordType, content));
+        careEventRecorder.record(user, targetType.toUpperCase(), targetId, "CARE_RECORD_SAVE",
+                Map.of("targetType", targetType, "targetId", targetId,
+                        "recordType", recordType, "content", content),
+                "REST", "rest_record_" + record.getId());
 
         return Result.success("记录保存成功");
+    }
+
+    private void recordTargetEvent(String user, String subjectType, Long targetId,
+                                   String eventType, String name, String species) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("targetType", subjectType);
+        payload.put("targetId", targetId);
+        payload.put("name", name);
+        payload.put("species", species);
+        careEventRecorder.record(user, subjectType, targetId, eventType, payload,
+                "REST", "rest_target_create_" + subjectType.toLowerCase() + "_" + targetId);
     }
 
     @PostMapping("/qa")
@@ -174,7 +226,12 @@ public class CareController {
     }
 
     @PostMapping("/qa/summary")
-    public Result<Map<String, Object>> qaSummary(@RequestBody Map<String, Object> params) {
+    public Result<Map<String, Object>> qaSummary(@RequestBody Map<String, Object> params,
+                                                 HttpSession session) {
+        String user = currentUser(session);
+        if (user == null) {
+            return Result.error("未登录");
+        }
         String reply = (String) params.get("reply");
         String targetType = (String) params.get("targetType");
         String targetName = (String) params.get("targetName");

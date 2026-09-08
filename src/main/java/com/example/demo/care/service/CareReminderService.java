@@ -1,5 +1,6 @@
 package com.example.demo.care.service;
 
+import com.example.demo.agent.service.CareEventRecorder;
 import com.example.demo.care.model.CareRecord;
 import com.example.demo.care.model.CareTarget;
 import com.example.demo.care.repository.CareRecordRepository;
@@ -25,15 +26,18 @@ public class CareReminderService {
     private final CareTargetRepository careTargetRepository;
     private final CareRecordRepository careRecordRepository;
     private final WebPushService webPushService;
+    private final CareEventRecorder careEventRecorder;
 
     public CareReminderService(JdbcTemplate jdbc,
                                CareTargetRepository careTargetRepository,
                                CareRecordRepository careRecordRepository,
-                               WebPushService webPushService) {
+                               WebPushService webPushService,
+                               CareEventRecorder careEventRecorder) {
         this.jdbc = jdbc;
         this.careTargetRepository = careTargetRepository;
         this.careRecordRepository = careRecordRepository;
         this.webPushService = webPushService;
+        this.careEventRecorder = careEventRecorder;
     }
 
     @Scheduled(fixedDelay = 60000, initialDelay = 30000)
@@ -54,7 +58,21 @@ public class CareReminderService {
 
                 deliverReminder(userId, reminderText);
 
-                jdbc.update("UPDATE care_reminder SET status='SENT' WHERE id=? AND status='PENDING'", id);
+                // 只有真正从 PENDING 翻到 SENT 的那一次才写事件，天然幂等
+                int delivered = jdbc.update(
+                        "UPDATE care_reminder SET status='SENT' WHERE id=? AND status='PENDING'", id);
+                if (delivered > 0) {
+                    String targetType = row.get("target_type") == null
+                            ? null : String.valueOf(row.get("target_type")).toUpperCase();
+                    Long targetId = row.get("target_id") == null
+                            ? null : ((Number) row.get("target_id")).longValue();
+                    careEventRecorder.record(userId, targetType, targetId, "REMINDER_DELIVERED",
+                            Map.of("reminderId", id,
+                                    "reminderType", String.valueOf(row.get("reminder_type")),
+                                    "content", String.valueOf(row.get("content")),
+                                    "dueAt", String.valueOf(row.get("due_at"))),
+                            "SCHEDULER", "reminder_delivery_" + id);
+                }
             }
         } catch (Exception e) {
             log.error("[Reminder] Error sending reminders: {}", e.getMessage(), e);
