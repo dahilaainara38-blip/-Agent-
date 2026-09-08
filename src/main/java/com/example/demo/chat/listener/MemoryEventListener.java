@@ -26,14 +26,31 @@ public class MemoryEventListener {
     @EventListener
     @Async("vectorTaskExecutor")
     public void handleVectorSaveEvent(VectorSaveEvent event) {
-        try {
-            logger.debug("Processing VectorSaveEvent for conversation: {}", event.getConversationId());
-            vectorStoreService.saveMessageForUser(event.getConversationId(),
-                    event.getOwnerId(), event.getUserMessage(), event.getAssistantReply());
-            logger.debug("Vector saved successfully for conversation: {}", event.getConversationId());
-        } catch (Exception e) {
-            logger.error("Failed to save vector asynchronously for conversation: {}", 
-                    event.getConversationId(), e);
+        for (int attempt = 1; attempt <= 2; attempt++) {
+            try {
+                logger.debug("Processing VectorSaveEvent for conversation: {}", event.getConversationId());
+                vectorStoreService.saveMessageForUser(event.getConversationId(),
+                        event.getOwnerId(), event.getUserMessage(), event.getAssistantReply());
+                if (attempt > 1) {
+                    logger.info("Vector save recovered on attempt {} for conversation: {}",
+                            attempt, event.getConversationId());
+                }
+                return;
+            } catch (Exception e) {
+                if (attempt >= 2) {
+                    logger.error("Failed to save vector asynchronously for conversation: {}",
+                            event.getConversationId(), e);
+                    return;
+                }
+                logger.warn("Vector save attempt 1 failed for conversation: {}, retrying: {}",
+                        event.getConversationId(), e.getMessage());
+                try {
+                    Thread.sleep(300);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
         }
     }
     

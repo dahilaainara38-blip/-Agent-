@@ -353,21 +353,30 @@ public class ToolBroker {
         if (toolTraceRepository == null) {
             return;
         }
-        try {
-            toolTraceRepository.save(ToolTrace.builder()
-                    .traceId(traceId == null ? "direct" : traceId)
-                    .conversationId(context.conversationId())
-                    .userId(context.userId())
-                    .toolName(toolName)
-                    .accessMode(accessMode)
-                    .status(status)
-                    .argumentsJson(arguments)
-                    .resultJson(result)
-                    .errorMessage(error)
-                    .durationMs(duration)
-                    .build());
-        } catch (Exception e) {
-            log.warn("Failed to persist tool trace for {}", toolName, e);
+        for (int attempt = 1; attempt <= 2; attempt++) {
+            try {
+                toolTraceRepository.save(ToolTrace.builder()
+                        .traceId(traceId == null ? "direct" : traceId)
+                        .conversationId(context.conversationId())
+                        .userId(context.userId())
+                        .toolName(toolName)
+                        .accessMode(accessMode)
+                        .status(status)
+                        .argumentsJson(arguments)
+                        .resultJson(result)
+                        .errorMessage(error)
+                        .durationMs(duration)
+                        .build());
+                return;
+            } catch (Exception e) {
+                if (attempt >= 2) {
+                    // 轨迹丢失意味着这次工具执行失去观测记录，按错误级别上报
+                    log.error("Failed to persist tool trace for {} (traceId={}, user={}) after retry",
+                            toolName, traceId, context.userId(), e);
+                    return;
+                }
+                log.warn("Tool trace save attempt 1 failed for {}: {}", toolName, e.getMessage());
+            }
         }
     }
 

@@ -111,7 +111,9 @@ public class VectorStoreService {
             }
 
         } catch (Exception e) {
+            // 记忆丢失对用户可感（会话记忆退化），必须上抛让异步监听器重试
             logger.error("[VectorStore] Failed to save vector, cause: {}", e.getMessage(), e);
+            throw new IllegalStateException("向量记忆保存失败：" + e.getMessage(), e);
         }
     }
 
