@@ -210,7 +210,7 @@ public class ToolCallingService {
         try {
             log.info("[Trace:{}] Executing tool: {} with args: {}",
                     traceId, tc.toolName, tc.arguments);
-            result = toolBroker.execute(tc.toolName, tc.arguments, traceId, context);
+            result = toolBroker.executeInline(tc.toolName, tc.arguments, traceId, context);
             log.info("[Trace:{}] Tool {} completed in {}ms",
                     traceId, tc.toolName, System.currentTimeMillis() - start);
         } catch (Exception e) {

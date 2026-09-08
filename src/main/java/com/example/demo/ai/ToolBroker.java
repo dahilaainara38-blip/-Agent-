@@ -181,7 +181,33 @@ public class ToolBroker {
         return "object";
     }
 
+    /** 同步执行：提交到 broker 线程池并等待 {@code timeoutMs}，供 HTTP 线程等直接调用方使用。 */
     public String execute(String toolName, JSONObject arguments, String traceId, AgentContext context) {
+        long startedAt = System.currentTimeMillis();
+        String safeArgs = sanitize(arguments).toJSONString();
+        Future<String> future = null;
+        try {
+            future = executor.submit(() -> executeInline(toolName, arguments, traceId, context));
+            return future.get(timeoutMs, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            future.cancel(true);
+            String message = "工具执行超时";
+            audit(traceId, context, toolName, accessMode(toolName), "TIMEOUT",
+                    safeArgs, null, message, System.currentTimeMillis() - startedAt);
+            throw new IllegalStateException(message, e);
+        } catch (Exception e) {
+            // executeInline 内部已完成 ERROR/RATE_LIMITED 审计，这里只负责解包透传
+            Throwable cause = e instanceof InvocationTargetException exception
+                    ? exception.getTargetException() : unwrap(e);
+            if (cause instanceof RuntimeException runtime) {
+                throw runtime;
+            }
+            throw new RuntimeException(cause);
+        }
+    }
+
+    /** 在调用线程直接执行工具：供已运行在专用线程池中的调用方（如工具循环）复用，避免双层线程池嵌套。 */
+    public String executeInline(String toolName, JSONObject arguments, String traceId, AgentContext context) {
         ToolInfo info = toolRegistry.get(toolName);
         if (info == null) {
             throw new IllegalArgumentException("未知工具：" + toolName);
@@ -195,27 +221,19 @@ public class ToolBroker {
         long startedAt = System.currentTimeMillis();
         String safeArgs = sanitize(arguments).toJSONString();
         String accessMode = accessMode(toolName);
-        Future<String> future = null;
+
+        if (WRITE_TOOLS.contains(toolName) && !context.hasPermission(AgentContext.Permission.AGENT_WRITE)) {
+            String result = requestConfirmation(toolName, arguments, context);
+            audit(traceId, context, toolName, accessMode, "CONFIRMATION_REQUIRED",
+                    safeArgs, result, null, System.currentTimeMillis() - startedAt);
+            return result;
+        }
 
         try {
-            if (WRITE_TOOLS.contains(toolName) && !context.hasPermission(AgentContext.Permission.AGENT_WRITE)) {
-                String result = requestConfirmation(toolName, arguments, context);
-                audit(traceId, context, toolName, accessMode, "CONFIRMATION_REQUIRED",
-                        safeArgs, result, null, System.currentTimeMillis() - startedAt);
-                return result;
-            }
-
-            future = executor.submit(() -> invoke(info, arguments, context));
-            String result = future.get(timeoutMs, TimeUnit.MILLISECONDS);
+            String result = invoke(info, arguments, context);
             audit(traceId, context, toolName, accessMode, "SUCCESS",
                     safeArgs, truncate(result), null, System.currentTimeMillis() - startedAt);
             return result;
-        } catch (TimeoutException e) {
-            future.cancel(true);
-            String message = "工具执行超时";
-            audit(traceId, context, toolName, accessMode, "TIMEOUT",
-                    safeArgs, null, message, System.currentTimeMillis() - startedAt);
-            throw new IllegalStateException(message, e);
         } catch (Exception e) {
             Throwable cause = e instanceof InvocationTargetException exception
                     ? exception.getTargetException() : unwrap(e);
