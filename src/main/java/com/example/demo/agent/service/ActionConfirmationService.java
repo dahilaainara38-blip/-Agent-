@@ -8,26 +8,34 @@ import com.example.demo.agent.repository.ActionConfirmationRepository;
 import com.example.demo.agent.repository.CareEventRepository;
 import com.example.demo.ai.AgentContext;
 import com.example.demo.ai.ToolBroker;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+@Slf4j
 @Service
 public class ActionConfirmationService {
 
     private final ActionConfirmationRepository repository;
     private final CareEventRepository eventRepository;
     private final ToolBroker toolBroker;
+    private final TransactionTemplate transactionTemplate;
 
     public ActionConfirmationService(ActionConfirmationRepository repository,
                                      CareEventRepository eventRepository,
-                                     ToolBroker toolBroker) {
+                                     ToolBroker toolBroker,
+                                     TransactionTemplate transactionTemplate) {
         this.repository = repository;
         this.eventRepository = eventRepository;
         this.toolBroker = toolBroker;
+        this.transactionTemplate = transactionTemplate;
     }
 
     public ActionConfirmation owned(Long id, String userId) {
@@ -36,64 +44,112 @@ public class ActionConfirmationService {
     }
 
     public ConfirmationOutcome confirm(Long id, String userId) {
-        ActionConfirmation confirmation = owned(id, userId);
-        if (confirmation.getStatus() != ActionConfirmation.Status.PENDING) {
-            throw new IllegalArgumentException("该操作已处理");
-        }
-        if (confirmation.getExpiresAt().isBefore(LocalDateTime.now())) {
-            confirmation.setStatus(ActionConfirmation.Status.EXPIRED);
-            repository.save(confirmation);
-            throw new IllegalArgumentException("确认已超时，请重新发起操作");
+        LocalDateTime now = LocalDateTime.now();
+        int claimed = repository.claimForExecution(id, userId,
+                List.of(ActionConfirmation.Status.PENDING, ActionConfirmation.Status.FAILED),
+                ActionConfirmation.Status.EXECUTING, now);
+        if (claimed == 0) {
+            throw rejectionFor(id, userId, now);
         }
 
-        confirmation.setStatus(ActionConfirmation.Status.CONFIRMED);
-        confirmation = repository.save(confirmation);
-
-        JSONObject arguments = JSON.parseObject(confirmation.getPayloadJson());
+        ActionConfirmation claimedRow = owned(id, userId);
+        JSONObject arguments = JSON.parseObject(claimedRow.getPayloadJson());
         String subjectType = arguments.containsKey("targetType")
                 ? String.valueOf(arguments.get("targetType")).toUpperCase()
                 : null;
         AgentContext context = new AgentContext(
-                confirmation.getUserId(),
-                confirmation.getConversationId(),
+                claimedRow.getUserId(),
+                claimedRow.getConversationId(),
                 null,
-                confirmation.getSubjectId()
-        ).confirmed(confirmation.getId(), Set.of(AgentContext.Permission.AGENT_WRITE));
-        String result = toolBroker.execute(
-                confirmation.getToolName(),
-                arguments,
-                "confirmation_" + confirmation.getId(),
-                context
-        );
+                claimedRow.getSubjectId()
+        ).confirmed(claimedRow.getId(), Set.of(AgentContext.Permission.AGENT_WRITE));
 
-        confirmation.setStatus(ActionConfirmation.Status.EXECUTED);
-        confirmation.setExecutedAt(LocalDateTime.now());
-        confirmation.setResult(result);
-        confirmation = repository.save(confirmation);
+        String result;
+        try {
+            result = toolBroker.execute(
+                    claimedRow.getToolName(),
+                    arguments,
+                    "confirmation_" + claimedRow.getId(),
+                    context
+            );
+        } catch (Exception e) {
+            String error = failureMessage(e);
+            repository.markFailed(id, ActionConfirmation.Status.EXECUTING,
+                    ActionConfirmation.Status.FAILED, error);
+            throw new IllegalStateException("操作执行失败：" + error + "，可重新点击确认重试", e);
+        }
 
-        eventRepository.save(CareEvent.builder()
-                .eventId("evt_" + UUID.randomUUID())
-                .userId(confirmation.getUserId())
-                .subjectType(subjectType)
-                .subjectId(confirmation.getSubjectId())
-                .eventType(confirmation.getActionType())
-                .payload(confirmation.getPayloadJson())
-                .source("AGENT_CONFIRMATION")
-                .sourceEventId("confirmation_" + confirmation.getId())
-                .occurredAt(LocalDateTime.now())
-                .build());
-
-        return outcome(confirmation, result);
+        Long confirmationId = claimedRow.getId();
+        ActionConfirmation executed = transactionTemplate.execute(tx -> {
+            ActionConfirmation fresh = owned(confirmationId, userId);
+            fresh.setStatus(ActionConfirmation.Status.EXECUTED);
+            fresh.setExecutedAt(now);
+            fresh.setResult(result);
+            fresh.setErrorMessage(null);
+            ActionConfirmation saved = repository.save(fresh);
+            eventRepository.save(CareEvent.builder()
+                    .eventId("evt_" + UUID.randomUUID())
+                    .userId(saved.getUserId())
+                    .subjectType(subjectType)
+                    .subjectId(saved.getSubjectId())
+                    .eventType(saved.getActionType())
+                    .payload(saved.getPayloadJson())
+                    .source("AGENT_CONFIRMATION")
+                    .sourceEventId("confirmation_" + saved.getId())
+                    .occurredAt(now)
+                    .build());
+            return saved;
+        });
+        return outcome(executed, result);
     }
 
     public ConfirmationOutcome cancel(Long id, String userId) {
-        ActionConfirmation confirmation = owned(id, userId);
-        if (confirmation.getStatus() != ActionConfirmation.Status.PENDING) {
-            throw new IllegalArgumentException("该操作已处理");
+        int cancelled = repository.cancelPending(id, userId,
+                ActionConfirmation.Status.PENDING, ActionConfirmation.Status.CANCELLED);
+        if (cancelled == 0) {
+            throw rejectionFor(id, userId, LocalDateTime.now());
         }
-        confirmation.setStatus(ActionConfirmation.Status.CANCELLED);
-        confirmation = repository.save(confirmation);
-        return outcome(confirmation, "操作已取消");
+        return outcome(owned(id, userId), "操作已取消");
+    }
+
+    /** 定时把已过期的 PENDING/FAILED 置为 EXPIRED，替代用户点击时的惰性置位。 */
+    @Scheduled(fixedDelay = 60_000, initialDelay = 60_000)
+    public void expireOverdueConfirmations() {
+        int expired = repository.expireOverdue(
+                List.of(ActionConfirmation.Status.PENDING, ActionConfirmation.Status.FAILED),
+                ActionConfirmation.Status.EXPIRED, LocalDateTime.now());
+        if (expired > 0) {
+            log.info("Expired {} overdue action confirmation(s)", expired);
+        }
+    }
+
+    private IllegalArgumentException rejectionFor(Long id, String userId, LocalDateTime now) {
+        ActionConfirmation confirmation = owned(id, userId);
+        if ((confirmation.getStatus() == ActionConfirmation.Status.PENDING
+                || confirmation.getStatus() == ActionConfirmation.Status.FAILED)
+                && !confirmation.getExpiresAt().isAfter(now)) {
+            confirmation.setStatus(ActionConfirmation.Status.EXPIRED);
+            repository.save(confirmation);
+            return new IllegalArgumentException("确认已超时，请重新发起操作");
+        }
+        return switch (confirmation.getStatus()) {
+            case EXECUTING -> new IllegalArgumentException("该操作正在执行，请稍候查看结果");
+            case EXECUTED -> new IllegalArgumentException("该操作已执行，请勿重复操作");
+            case CANCELLED -> new IllegalArgumentException("该操作已取消");
+            case EXPIRED -> new IllegalArgumentException("确认已超时，请重新发起操作");
+            case FAILED -> new IllegalArgumentException("该操作此前执行失败，可重新点击确认重试");
+            case CONFIRMED -> new IllegalArgumentException("该操作已处理");
+            case PENDING -> new IllegalArgumentException("该操作暂时无法执行，请稍后重试");
+        };
+    }
+
+    private String failureMessage(Exception e) {
+        Throwable cause = e;
+        while (cause.getCause() != null && cause.getCause() != cause) {
+            cause = cause.getCause();
+        }
+        String message = cause.getMessage();
+        return message == null || message.isBlank() ? "工具执行失败" : message;
     }
 
     public Card card(ActionConfirmation confirmation) {

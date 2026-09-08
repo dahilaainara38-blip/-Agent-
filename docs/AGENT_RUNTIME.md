@@ -123,3 +123,7 @@ The planner may propose these writes, but the Tool Broker stores an `action_conf
 - The legacy `/api/care/qa` path remains compiled and selectable.
 - If runtime behavior fails globally, use the last pre-runtime commit `8e307a2`.
 - Do not reset a branch containing uncommitted work.
+
+## Next
+
+Follow-up roadmap (reliability hardening, domain event convergence, frontend migration) lives in `REFACTOR_NEXT.md`.

@@ -59,6 +59,9 @@ public class ActionConfirmation {
     @Column(name = "result", columnDefinition = "TEXT")
     private String result;
 
+    @Column(name = "error_message", columnDefinition = "TEXT")
+    private String errorMessage;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
@@ -70,6 +73,8 @@ public class ActionConfirmation {
     }
 
     public enum Status {
-        PENDING, CONFIRMED, EXECUTED, CANCELLED, EXPIRED
+        PENDING, EXECUTING, EXECUTED, FAILED, CANCELLED, EXPIRED,
+        /** 旧流程的中间态，仅用于兼容存量行，不再写入。 */
+        CONFIRMED
     }
 }

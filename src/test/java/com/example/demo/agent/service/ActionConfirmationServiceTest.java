@@ -9,14 +9,19 @@ import com.example.demo.ai.ToolBroker;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.transaction.support.TransactionCallback;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -28,18 +33,22 @@ class ActionConfirmationServiceTest {
     private ActionConfirmationService service;
 
     @BeforeEach
+    @SuppressWarnings("unchecked")
     void setUp() {
         repository = mock(ActionConfirmationRepository.class);
         eventRepository = mock(CareEventRepository.class);
         toolBroker = mock(ToolBroker.class);
-        service = new ActionConfirmationService(repository, eventRepository, toolBroker);
+        TransactionTemplate transactionTemplate = mock(TransactionTemplate.class);
+        when(transactionTemplate.execute(any())).thenAnswer(invocation ->
+                ((TransactionCallback<Object>) invocation.getArgument(0)).doInTransaction(null));
+        service = new ActionConfirmationService(repository, eventRepository, toolBroker, transactionTemplate);
     }
 
     @Test
     void confirmExecutesOnlyAfterExplicitUserActionAndWritesEvent() {
-        ActionConfirmation confirmation = pending();
+        when(repository.claimForExecution(eq(9L), eq("user-1"), any(), any(), any())).thenReturn(1);
         when(repository.findByIdAndUserId(9L, "user-1"))
-                .thenReturn(Optional.of(confirmation));
+                .thenReturn(Optional.of(pending()));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(toolBroker.execute(any(), any(), any(), any())).thenReturn("提醒已创建");
 
@@ -60,15 +69,95 @@ class ActionConfirmationServiceTest {
     }
 
     @Test
-    void cancelDoesNotExecuteTool() {
+    void concurrentClaimIsRejectedWithoutExecutingTool() {
+        when(repository.claimForExecution(eq(9L), eq("user-1"), any(), any(), any())).thenReturn(0);
+        ActionConfirmation executing = pending();
+        executing.setStatus(ActionConfirmation.Status.EXECUTING);
         when(repository.findByIdAndUserId(9L, "user-1"))
+                .thenReturn(Optional.of(executing));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> service.confirm(9L, "user-1"));
+
+        assertTrue(error.getMessage().contains("正在执行"));
+        verify(toolBroker, never()).execute(any(), any(), any(), any());
+    }
+
+    @Test
+    void failedExecutionMarksFailedAndAllowsRetry() {
+        when(repository.claimForExecution(eq(9L), eq("user-1"), any(), any(), any()))
+                .thenReturn(1, 1);
+        ActionConfirmation failed = pending();
+        failed.setStatus(ActionConfirmation.Status.FAILED);
+        when(repository.findByIdAndUserId(9L, "user-1"))
+                .thenReturn(Optional.of(pending()))
+                .thenReturn(Optional.of(failed))
                 .thenReturn(Optional.of(pending()));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        when(toolBroker.execute(any(), any(), any(), any()))
+                .thenThrow(new RuntimeException("工具执行超时", new IllegalStateException("上游超时")))
+                .thenReturn("提醒已创建");
+
+        IllegalStateException first = assertThrows(IllegalStateException.class,
+                () -> service.confirm(9L, "user-1"));
+        assertTrue(first.getMessage().contains("重试"));
+        verify(repository).markFailed(eq(9L),
+                eq(ActionConfirmation.Status.EXECUTING), eq(ActionConfirmation.Status.FAILED),
+                eq("上游超时"));
+
+        var retried = service.confirm(9L, "user-1");
+
+        assertEquals("EXECUTED", retried.status());
+        assertEquals("提醒已创建", retried.reply());
+        verify(eventRepository).save(any(CareEvent.class));
+    }
+
+    @Test
+    void expiredConfirmationIsRejectedAndMarkedExpired() {
+        when(repository.claimForExecution(eq(9L), eq("user-1"), any(), any(), any())).thenReturn(0);
+        ActionConfirmation overdue = pending();
+        overdue.setExpiresAt(LocalDateTime.now().minusMinutes(1));
+        when(repository.findByIdAndUserId(9L, "user-1"))
+                .thenReturn(Optional.of(overdue));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> service.confirm(9L, "user-1"));
+
+        assertTrue(error.getMessage().contains("超时"));
+        ArgumentCaptor<ActionConfirmation> captor = ArgumentCaptor.forClass(ActionConfirmation.class);
+        verify(repository).save(captor.capture());
+        assertEquals(ActionConfirmation.Status.EXPIRED, captor.getValue().getStatus());
+        verify(toolBroker, never()).execute(any(), any(), any(), any());
+    }
+
+    @Test
+    void cancelDoesNotExecuteTool() {
+        when(repository.cancelPending(eq(9L), eq("user-1"), any(), any())).thenReturn(1);
+        ActionConfirmation cancelled = pending();
+        cancelled.setStatus(ActionConfirmation.Status.CANCELLED);
+        when(repository.findByIdAndUserId(9L, "user-1"))
+                .thenReturn(Optional.of(cancelled));
 
         var result = service.cancel(9L, "user-1");
 
         assertEquals("CANCELLED", result.status());
-        verify(toolBroker, org.mockito.Mockito.never()).execute(any(), any(), any(), any());
+        verify(toolBroker, never()).execute(any(), any(), any(), any());
+    }
+
+    @Test
+    void cancelAfterFailureIsRejected() {
+        when(repository.cancelPending(eq(9L), eq("user-1"), any(), any())).thenReturn(0);
+        ActionConfirmation failed = pending();
+        failed.setStatus(ActionConfirmation.Status.FAILED);
+        when(repository.findByIdAndUserId(9L, "user-1"))
+                .thenReturn(Optional.of(failed));
+
+        IllegalArgumentException error = assertThrows(IllegalArgumentException.class,
+                () -> service.cancel(9L, "user-1"));
+
+        assertTrue(error.getMessage().contains("执行失败"));
+        verify(toolBroker, never()).execute(any(), any(), any(), any());
     }
 
     private ActionConfirmation pending() {
