@@ -35,3 +35,7 @@ CREATE TABLE IF NOT EXISTS identify_history (
 -- ALTER TABLE identify_history ADD COLUMN image_url VARCHAR(500) COMMENT '原图路径' AFTER result;
 -- ALTER TABLE identify_history ADD COLUMN metadata JSON COMMENT '扩展字段' AFTER image_url;
 -- ALTER TABLE care_reminder ADD COLUMN metadata JSON COMMENT '扩展字段' AFTER content;
+
+-- 领域事件幂等：同一来源（如确认执行 confirmation_<id>）只允许一条 care_event。
+-- MySQL 不支持 CREATE INDEX IF NOT EXISTS：索引已存在或存量数据有重复时本语句报错并被初始化器跳过，属预期行为。
+CREATE UNIQUE INDEX idx_care_event_source_event ON care_event (source_event_id);
