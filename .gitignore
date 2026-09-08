@@ -48,3 +48,4 @@ rag_knowledge.sqlite
 ### Local secrets & config ###
 .env
 application-local.properties
+*.sqlite.bak-*

@@ -45,10 +45,23 @@ public class VectorStoreService {
     @PostConstruct
     public void init() {
         try {
+            purgeOrphanedVectors();
+        } catch (Exception e) {
+            // 清理失败不阻断索引加载，下次启动重试（幂等）
+            logger.warn("Orphaned vector cleanup failed, will retry on next startup: {}", e.getMessage());
+        }
+        try {
             loadFromSQLite();
         } catch (Exception e) {
             logger.warn("Vector index initialization failed, will retry on first use: {}", e.getMessage());
             indexReady.set(false);
+        }
+    }
+
+    private void purgeOrphanedVectors() {
+        int purged = vectorStoreRepository.deleteOrphanedVectors();
+        if (purged > 0) {
+            logger.info("Purged {} orphaned vector(s) with no owner, source, or conversation", purged);
         }
     }
 
