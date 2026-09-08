@@ -6,6 +6,7 @@ import com.alibaba.fastjson2.JSONObject;
 import com.example.demo.chat.LlmService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PreDestroy;
@@ -22,11 +23,14 @@ public class ToolCallingService {
     private final LlmService llmService;
     private final ToolBroker toolBroker;
     private final ExecutorService toolExecutor;
+    private final long waitTimeoutMs;
 
     @Autowired
-    public ToolCallingService(LlmService llmService, ToolBroker toolBroker) {
+    public ToolCallingService(LlmService llmService, ToolBroker toolBroker,
+                              @Value("${agent.tools.wait-timeout-ms:10000}") long waitTimeoutMs) {
         this.llmService = llmService;
         this.toolBroker = toolBroker;
+        this.waitTimeoutMs = waitTimeoutMs;
         this.toolExecutor = Executors.newFixedThreadPool(
                 Math.min(Runtime.getRuntime().availableProcessors(), 4),
                 r -> {
@@ -65,6 +69,7 @@ public class ToolCallingService {
 
         for (int iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
             iterations = iteration + 1;
+            boolean toolsDispatched = false;
             log.info("[Trace:{}] Iteration {}/{}, messages: {}",
                     traceId, iterations, MAX_ITERATIONS, messages.size());
 
@@ -86,50 +91,24 @@ public class ToolCallingService {
                     log.info("[Trace:{}] Found {} tool calls, executing concurrently",
                             traceId, toolCalls.size());
 
+                    Map<String, ToolCallInfo> callsById = new LinkedHashMap<>();
                     Map<String, Future<ToolCallResult>> futureMap = new LinkedHashMap<>();
 
                     for (ToolCallInfo tc : toolCalls) {
-                        futureMap.put(tc.id, CompletableFuture.supplyAsync(() -> {
-                            long start = System.currentTimeMillis();
-                            String result;
-                            boolean success = true;
-                            String errorMsg = null;
-
-                            try {
-                                log.info("[Trace:{}] Executing tool: {} with args: {}",
-                                        traceId, tc.toolName, tc.arguments);
-                                result = toolBroker.execute(tc.toolName, tc.arguments, traceId, context);
-                                log.info("[Trace:{}] Tool {} completed in {}ms",
-                                        traceId, tc.toolName, System.currentTimeMillis() - start);
-                            } catch (Exception e) {
-                                success = false;
-                                errorMsg = e.getMessage();
-                                result = "工具执行异常：" + e.getMessage();
-                                log.error("[Trace:{}] Tool {} failed: {}",
-                                        traceId, tc.toolName, e.getMessage());
-                            }
-
-                            long duration = System.currentTimeMillis() - start;
-                            ToolCallResult callResult = success
-                                    ? ToolCallResult.success(traceId, tc.toolName, tc.arguments, result, duration)
-                                    : ToolCallResult.error(traceId, tc.toolName, tc.arguments, errorMsg, duration);
-
-                            synchronized (generatedFiles) {
-                                generatedFiles.addAll(extractGeneratedFiles(result));
-                            }
-
-                            return callResult;
-                        }, toolExecutor));
+                        callsById.put(tc.id, tc);
+                        futureMap.put(tc.id, CompletableFuture.supplyAsync(
+                                () -> runTool(tc, traceId, context, generatedFiles), toolExecutor));
                     }
+                    toolsDispatched = true;
 
                     for (Map.Entry<String, Future<ToolCallResult>> entry : futureMap.entrySet()) {
-                        String toolCallId = entry.getKey();
-                        ToolCallResult callResult = entry.getValue().get(10, TimeUnit.SECONDS);
+                        ToolCallInfo info = callsById.get(entry.getKey());
+                        ToolCallResult callResult = awaitTool(entry.getValue(), info, traceId);
                         toolCallHistory.add(callResult);
 
                         JSONObject toolMsg = new JSONObject();
                         toolMsg.put("role", "tool");
-                        toolMsg.put("tool_call_id", toolCallId);
+                        toolMsg.put("tool_call_id", entry.getKey());
                         toolMsg.put("content", callResult.getResult());
                         messages.add(toolMsg);
                     }
@@ -165,7 +144,9 @@ public class ToolCallingService {
                 log.error("[Trace:{}] Tool calling iteration {} failed: {}",
                         traceId, iteration, e.getMessage());
 
-                if (iteration == MAX_ITERATIONS - 1) {
+                // 已派发工具的迭代绝不整体重试：重放 LLM 可能再次执行同一工具，
+                // 只有纯 LLM 调用失败（未执行任何工具）才允许重试下一轮。
+                if (toolsDispatched || iteration == MAX_ITERATIONS - 1) {
                     return ToolCallResponse.builder()
                             .text("处理请求时发生错误: " + e.getMessage())
                             .generatedFiles(generatedFiles)
@@ -217,6 +198,55 @@ public class ToolCallingService {
                 .totalTokens(totalTokens)
                 .traceId(traceId)
                 .build();
+    }
+
+    private ToolCallResult runTool(ToolCallInfo tc, String traceId, AgentContext context,
+                                   List<Path> generatedFiles) {
+        long start = System.currentTimeMillis();
+        String result;
+        boolean success = true;
+        String errorMsg = null;
+
+        try {
+            log.info("[Trace:{}] Executing tool: {} with args: {}",
+                    traceId, tc.toolName, tc.arguments);
+            result = toolBroker.execute(tc.toolName, tc.arguments, traceId, context);
+            log.info("[Trace:{}] Tool {} completed in {}ms",
+                    traceId, tc.toolName, System.currentTimeMillis() - start);
+        } catch (Exception e) {
+            success = false;
+            errorMsg = e.getMessage();
+            result = "工具执行异常：" + e.getMessage();
+            log.error("[Trace:{}] Tool {} failed: {}",
+                    traceId, tc.toolName, e.getMessage());
+        }
+
+        long duration = System.currentTimeMillis() - start;
+        ToolCallResult callResult = success
+                ? ToolCallResult.success(traceId, tc.toolName, tc.arguments, result, duration)
+                : ToolCallResult.error(traceId, tc.toolName, tc.arguments, errorMsg, duration);
+
+        synchronized (generatedFiles) {
+            generatedFiles.addAll(extractGeneratedFiles(result));
+        }
+
+        return callResult;
+    }
+
+    /** 单工具等待：超时/等待异常只影响该工具的结果，不再把整个迭代炸成重试。 */
+    private ToolCallResult awaitTool(Future<ToolCallResult> future, ToolCallInfo info, String traceId) {
+        long start = System.currentTimeMillis();
+        try {
+            return future.get(waitTimeoutMs, TimeUnit.MILLISECONDS);
+        } catch (Exception e) {
+            // CompletableFuture.cancel 不会中断底层任务，工具仍在 broker 侧受其自身超时约束，结果被丢弃
+            future.cancel(true);
+            String error = e instanceof TimeoutException
+                    ? "工具执行超时" : "工具等待失败：" + e.getMessage();
+            log.error("[Trace:{}] Waiting for tool {} failed: {}", traceId, info.toolName, error);
+            return ToolCallResult.error(traceId, info.toolName, info.arguments, error,
+                    System.currentTimeMillis() - start);
+        }
     }
 
     private long extractTokens(JSONObject response) {

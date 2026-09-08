@@ -73,7 +73,7 @@ class ToolCallingServiceAgentContextTest {
                 1000,
                 0
         );
-        toolCallingService = new ToolCallingService(mock(LlmService.class), toolBroker);
+        toolCallingService = new ToolCallingService(mock(LlmService.class), toolBroker, 10_000);
     }
 
     @Test
