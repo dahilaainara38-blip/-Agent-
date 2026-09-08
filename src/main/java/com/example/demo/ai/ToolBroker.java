@@ -19,7 +19,9 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.time.LocalDateTime;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -63,7 +65,7 @@ public class ToolBroker {
     private final ExecutorService executor;
     private final long timeoutMs;
     private final long userCallsPerMinute;
-    private final ConcurrentHashMap<String, UserWindow> userWindows = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Deque<Long>> userCallLog = new ConcurrentHashMap<>();
 
     public ToolBroker(SpringAiTools springAiTools,
                       WeatherService weatherService,
@@ -249,35 +251,31 @@ public class ToolBroker {
         return cause == null ? throwable : cause;
     }
 
-    /** 固定窗口限流：同一用户每分钟最多 userCallsPerMinute 次工具调用，0 表示关闭。 */
+    /** 滑动窗口限流：任意 60 秒内同一用户最多 userCallsPerMinute 次工具调用，0 表示关闭。 */
     private void checkRateLimit(String toolName, JSONObject arguments, String traceId, AgentContext context) {
         if (userCallsPerMinute <= 0 || context.userId() == null || context.userId().isBlank()) {
             return;
         }
-        long currentMinute = System.currentTimeMillis() / 60_000;
-        UserWindow window = userWindows.compute(context.userId(),
-                (user, old) -> old != null && old.minute == currentMinute ? old : new UserWindow(currentMinute));
-        long count;
-        synchronized (window) {
-            window.count++;
-            count = window.count;
+        long now = System.currentTimeMillis();
+        Deque<Long> calls = userCallLog.computeIfAbsent(context.userId(), user -> new ArrayDeque<>());
+        boolean allowed;
+        synchronized (calls) {
+            long cutoff = now - 60_000;
+            while (!calls.isEmpty() && calls.peekFirst() <= cutoff) {
+                calls.pollFirst();
+            }
+            allowed = calls.size() < userCallsPerMinute;
+            if (allowed) {
+                calls.addLast(now);
+            }
         }
-        if (count <= userCallsPerMinute) {
+        if (allowed) {
             return;
         }
         String message = "工具调用过于频繁（每分钟上限 " + userCallsPerMinute + " 次），请稍后再试";
         audit(traceId, context, toolName, accessMode(toolName), "RATE_LIMITED",
                 sanitize(arguments).toJSONString(), null, message, 0);
         throw new IllegalStateException(message);
-    }
-
-    private static final class UserWindow {
-        final long minute;
-        long count;
-
-        UserWindow(long minute) {
-            this.minute = minute;
-        }
     }
 
     private void validateArguments(String toolName, Method method, JSONObject arguments) {
