@@ -126,4 +126,4 @@ The planner may propose these writes, but the Tool Broker stores an `action_conf
 
 ## Next
 
-Follow-up roadmap (reliability hardening, domain event convergence, frontend migration) lives in `REFACTOR_NEXT.md`.
+Follow-up roadmap (reliability hardening, domain event convergence, frontend migration) lives in `REFACTOR_NEXT.md`. Status: P0/P2 complete, the agent workspace (`agent.html`) is now the sole AI entry point — `chat.html`, `disease.html`, the `/api/care/qa` compatibility shell, and `AiController` have been retired.
