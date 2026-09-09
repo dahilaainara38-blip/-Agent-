@@ -2,10 +2,14 @@ package com.example.demo.ai;
 
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.example.demo.agent.service.ArtifactService;
 import com.example.demo.care.service.NearbyServiceSearchService;
 import com.example.demo.care.service.PetFoodSafetyService;
 import com.example.demo.care.service.PlantSafetyQueryService;
 import com.example.demo.chat.LlmService;
+import com.example.demo.chat.UserSessionService;
+import com.example.demo.disease.DiseaseRecognitionService;
+import com.example.demo.disease.model.DiseaseResult;
 import com.example.demo.weather.model.WeatherResponse;
 import com.example.demo.weather.service.WeatherService;
 import org.junit.jupiter.api.Test;
@@ -21,6 +25,8 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -52,6 +58,15 @@ class GoldenCaseToolRoutingTest {
 
     @MockitoBean
     private NearbyServiceSearchService nearbyServiceSearchService;
+
+    @MockitoBean
+    private ArtifactService artifactService;
+
+    @MockitoBean
+    private UserSessionService userSessionService;
+
+    @MockitoBean
+    private DiseaseRecognitionService diseaseRecognitionService;
 
     @Test
     void weatherGoldenCaseRoutesThroughBroker() throws Exception {
@@ -122,7 +137,56 @@ class GoldenCaseToolRoutingTest {
         assertToolResultFedBackToLlm("剧毒");
     }
 
+    @Test
+    void imageUploadFollowedByQuestionInvokesArtifactAnalysis() throws Exception {
+        when(artifactService.analyze("art-1", "golden-user", "这是什么植物？"))
+                .thenReturn("图中是一盆健康的绿萝，叶片舒展无病斑。");
+        when(llmService.chatWithTools(any(), any()))
+                .thenReturn(llmToolCall("analyzeImage", "{\"prompt\":\"这是什么植物？\"}"))
+                .thenReturn(llmText("这是一盆健康的绿萝。"));
+
+        ToolCallResponse response = run("这是什么植物？", new AgentContext(
+                "golden-user", "golden-conv", null, null,
+                Set.of(AgentContext.Permission.AGENT_READ), null, "art-1"));
+
+        verify(artifactService).analyze("art-1", "golden-user", "这是什么植物？");
+        assertToolSucceeded(response, "analyzeImage");
+        assertTrue(response.getText().contains("绿萝"));
+        assertToolResultFedBackToLlm("绿萝");
+    }
+
+    @Test
+    void leafImageInvokesDiseaseDiagnosisWithoutPersisting() throws Exception {
+        DiseaseResult result = new DiseaseResult();
+        result.setDiseaseName("白粉病");
+        result.setConfidence("HIGH");
+        result.setSymptoms("叶面白色粉末状霉层");
+        result.setTreatmentPlan("摘除病叶并喷施杀菌剂");
+        result.setPrevention("加强通风降低湿度");
+        result.setUrgencyLevel("24H");
+        when(userSessionService.getPendingImageBase64("golden-user")).thenReturn("aGVsbG8=");
+        when(diseaseRecognitionService.diagnose(any(byte[].class), anyString(), anyString()))
+                .thenReturn(result);
+        when(llmService.chatWithTools(any(), any()))
+                .thenReturn(llmToolCall("diagnoseDisease", "{\"type\":\"plant\"}"))
+                .thenReturn(llmText("叶片疑似白粉病，建议摘除病叶并喷施杀菌剂。"));
+
+        ToolCallResponse response = run("帮我看看这片叶子是不是生病了");
+
+        verify(diseaseRecognitionService).diagnose(any(byte[].class), eq("plant"), eq("golden-user"));
+        // 诊断是纯读：保存诊断必须经 saveDiagnosis 确认卡，不允许顺手落库
+        verify(diseaseRecognitionService, org.mockito.Mockito.never())
+                .saveHistory(any(), any(), any(), any());
+        assertToolSucceeded(response, "diagnoseDisease");
+        assertTrue(response.getText().contains("白粉病"));
+        assertToolResultFedBackToLlm("白粉病");
+    }
+
     private ToolCallResponse run(String userMessage) {
+        return run(userMessage, new AgentContext("golden-user", "golden-conv", null, null));
+    }
+
+    private ToolCallResponse run(String userMessage, AgentContext context) {
         JSONArray messages = new JSONArray();
         JSONObject system = new JSONObject();
         system.put("role", "system");
@@ -132,8 +196,7 @@ class GoldenCaseToolRoutingTest {
         user.put("role", "user");
         user.put("content", userMessage);
         messages.add(user);
-        return toolCallingService.chatWithMessages(messages, Set.of(),
-                new AgentContext("golden-user", "golden-conv", null, null));
+        return toolCallingService.chatWithMessages(messages, Set.of(), context);
     }
 
     private void assertToolSucceeded(ToolCallResponse response, String toolName) {
