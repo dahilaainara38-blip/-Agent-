@@ -36,7 +36,7 @@ class AgentRuntimeControllerIntegrationTest {
     void toolCatalogExposesAllBrokeredTools() throws Exception {
         mockMvc.perform(get("/api/agent/tools"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(25));
+                .andExpect(jsonPath("$.length()").value(26));
     }
 
     @Test

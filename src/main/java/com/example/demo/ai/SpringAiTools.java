@@ -441,6 +441,17 @@ public class SpringAiTools {
         return "诊断已保存到历史记录，可在诊断历史中回看。";
     }
 
+    @Tool(name = "listDiagnosisHistory", description = "查询用户最近的病害/皮肤病诊断历史记录（时间、病害名称、置信度、紧急程度）。")
+    public String listDiagnosisHistory(
+            @AgentContextParam AgentContext context) {
+        String userId = context.userId();
+        log.info("[Tool] listDiagnosisHistory called, userId: {}", userId);
+        if (userId == null || userId.isBlank()) {
+            return "请先登录后再查看诊断历史。";
+        }
+        return diseaseRecognitionService.listHistory(userId, 5);
+    }
+
     private String defaultIfEmpty(String value) {
         return value == null || value.isBlank() ? "未知" : value;
     }

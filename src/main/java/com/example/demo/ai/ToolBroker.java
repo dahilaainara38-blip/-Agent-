@@ -49,7 +49,7 @@ public class ToolBroker {
             "analyzeImage", "editImage", "createCareReminder", "completeCareReminder",
             "listCareReminders", "saveMedication", "checkMedication",
             "compareImages", "generateCarePlan", "diagnoseDisease", "saveDiagnosis",
-            "createCareSubject", "saveCareRecord"
+            "createCareSubject", "saveCareRecord", "listDiagnosisHistory"
     );
 
     private static final Map<String, String> ACTION_TYPES = Map.of(

@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.util.List;
 
 @Service
 public class DiseaseRecognitionService {
@@ -75,6 +76,31 @@ public class DiseaseRecognitionService {
         IdentifyHistory saved = identifyHistoryRepository.save(history);
         logger.info("Disease diagnosis history saved for user: {}", userId);
         return saved;
+    }
+
+    /** 诊断历史查询：供 agent 读工具展示最近诊断，覆盖旧 disease.html 的历史面板。 */
+    public String listHistory(String userId, int limit) {
+        List<IdentifyHistory> histories = identifyHistoryRepository
+                .findByUserIdAndIdentifyTypeOrderByCreatedAtDesc(userId, "DISEASE");
+        if (histories.isEmpty()) {
+            return "暂无诊断历史。上传照片诊断后，可以说\"保存诊断\"来记录。";
+        }
+        StringBuilder sb = new StringBuilder("【最近诊断历史】\n");
+        int count = Math.min(histories.size(), limit);
+        for (int i = 0; i < count; i++) {
+            IdentifyHistory history = histories.get(i);
+            sb.append(i + 1).append(". ");
+            try {
+                JSONObject result = JSON.parseObject(history.getResult());
+                sb.append(result.getString("diseaseName"))
+                        .append("（置信度 ").append(result.getString("confidence"))
+                        .append("，紧急程度 ").append(result.getString("urgencyLevel")).append("）");
+            } catch (Exception e) {
+                sb.append(history.getResult(), 0, Math.min(60, history.getResult().length()));
+            }
+            sb.append(" —— ").append(history.getCreatedAt()).append('\n');
+        }
+        return sb.toString();
     }
 
     private DiseaseResult parseDiseaseResult(String aiResponse) {

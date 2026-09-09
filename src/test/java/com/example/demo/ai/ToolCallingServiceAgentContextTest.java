@@ -95,7 +95,7 @@ class ToolCallingServiceAgentContextTest {
 
     @Test
     void brokerRegistersAllLegacyTools() {
-        assertEquals(25, toolCallingService.getRegisteredToolNames().size());
+        assertEquals(26, toolCallingService.getRegisteredToolNames().size());
     }
 
     @Test
