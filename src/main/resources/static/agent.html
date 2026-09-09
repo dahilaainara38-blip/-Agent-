@@ -1094,8 +1094,53 @@ async function sendMessage(event) {
     sendButton.disabled = true;
 
     const selected = state.subjects.find(subject => subject.id === state.selectedSubjectId);
+    const assistant = addMessage('assistant', '正在思考…');
+    const bubble = assistant.querySelector('.bubble');
+    let streamedText = '';
+    const traceHistory = [];
+
+    const applyFrame = frame => {
+        let eventName = 'message';
+        const dataLines = [];
+        frame.split('\n').forEach(line => {
+            if (line.startsWith('event:')) eventName = line.slice(6).trim();
+            else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+        });
+        if (!dataLines.length) return;
+        let payload;
+        try {
+            payload = JSON.parse(dataLines.join('\n'));
+        } catch (error) {
+            return;
+        }
+        if (eventName === 'phase') {
+            if (payload.phase === 'tools' && !streamedText) {
+                bubble.textContent = `正在调用工具（${payload.detail}）…`;
+            }
+        } else if (eventName === 'delta') {
+            if (!streamedText) bubble.textContent = '';
+            streamedText += payload.text || '';
+            bubble.textContent = streamedText;
+            scrollMessages();
+        } else if (eventName === 'tool') {
+            traceHistory.push(payload);
+            renderTrace(traceHistory);
+        } else if (eventName === 'done') {
+            streamedText = payload.reply || streamedText || '未返回内容';
+            bubble.innerHTML = linkify(streamedText);
+            appendCards(bubble, payload.cards);
+            if (payload.generatedFiles) renderFiles(payload.generatedFiles);
+            state.conversationId = payload.conversationId;
+            localStorage.setItem(CONVERSATION_KEY, payload.conversationId);
+            sessionDetail.textContent = payload.conversationId;
+            loadConversations();
+        } else if (eventName === 'error') {
+            throw new Error(payload.error || '处理失败');
+        }
+    };
+
     try {
-        const response = await fetch('/api/agent/messages', {
+        const response = await fetch('/api/agent/messages/stream', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
@@ -1106,24 +1151,34 @@ async function sendMessage(event) {
                 subjectId: selected?.id
             })
         });
-        const result = await response.json();
         if (response.status === 401) {
             location.href = '/login';
             return;
         }
-        if (!response.ok || !result.success) {
+        if (!response.ok || !response.body) {
+            const result = await response.json().catch(() => ({}));
             throw new Error(result.error || '发送失败');
         }
-        state.conversationId = result.conversationId;
-        localStorage.setItem(CONVERSATION_KEY, result.conversationId);
-        sessionDetail.textContent = result.conversationId;
-        const assistant = addMessage('assistant', result.reply || '未返回内容');
-        appendCards(assistant.querySelector('.bubble'), result.cards);
-        renderTrace(result.toolCallHistory);
-        renderFiles(result.generatedFiles);
-        loadConversations();
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (true) {
+            const {done, value} = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, {stream: true});
+            let separator;
+            while ((separator = buffer.indexOf('\n\n')) >= 0) {
+                const frame = buffer.slice(0, separator);
+                buffer = buffer.slice(separator + 2);
+                applyFrame(frame);
+            }
+        }
+        if (!streamedText) {
+            bubble.innerHTML = linkify('抱歉，我无法处理您的请求。');
+        }
     } catch (error) {
-        addMessage('assistant', `处理失败：${error.message}`);
+        bubble.innerHTML = linkify(`处理失败：${error.message}`);
     } finally {
         state.sending = false;
         sendButton.disabled = false;

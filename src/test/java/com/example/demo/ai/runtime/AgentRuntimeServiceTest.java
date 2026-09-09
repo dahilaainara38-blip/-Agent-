@@ -100,7 +100,7 @@ class AgentRuntimeServiceTest {
                 .build();
         when(subjectDirectory.resolve("user-1", "PET", 12L))
                 .thenReturn(Optional.of(new SubjectDirectoryService.ResolvedSubject(subject, 12L)));
-        when(toolCallingService.chatWithMessages(any(), anySet(), any())).thenReturn(
+        when(toolCallingService.chatWithMessagesStream(any(), anySet(), any(), any())).thenReturn(
                 ToolCallResponse.builder()
                         .text("收到")
                         .traceId("trace-1")
@@ -115,7 +115,7 @@ class AgentRuntimeServiceTest {
         );
 
         ArgumentCaptor<AgentContext> captor = ArgumentCaptor.forClass(AgentContext.class);
-        verify(toolCallingService).chatWithMessages(any(), anySet(), captor.capture());
+        verify(toolCallingService).chatWithMessagesStream(any(), anySet(), captor.capture(), any());
         assertEquals("user-1", captor.getValue().userId());
         assertEquals("PET", captor.getValue().subjectType());
         assertEquals(12L, captor.getValue().subjectId());
@@ -145,7 +145,7 @@ class AgentRuntimeServiceTest {
         when(confirmationService.card(confirmation)).thenReturn(new ActionConfirmationService.Card(
                 "REMINDER_CONFIRM", "确认创建护理提醒", new com.alibaba.fastjson2.JSONObject()
         ));
-        when(toolCallingService.chatWithMessages(any(), anySet(), any())).thenReturn(
+        when(toolCallingService.chatWithMessagesStream(any(), anySet(), any(), any())).thenReturn(
                 ToolCallResponse.builder()
                         .text("请确认 [CONFIRMATION:9]")
                         .traceId("trace-1")

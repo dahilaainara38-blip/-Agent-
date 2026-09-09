@@ -67,6 +67,12 @@ public class AgentRuntimeService {
     }
 
     public AgentChatResponse chat(AgentChatRequest request, HttpSession session) {
+        return chat(request, session, null);
+    }
+
+    /** 流式变体：listener 非空时工具循环以 SSE 增量驱动回调，落库与响应组装逻辑完全一致。 */
+    public AgentChatResponse chat(AgentChatRequest request, HttpSession session,
+                                  ToolCallingService.StreamListener listener) {
         requireEnabled();
         String userId = currentUser(session);
         String message = resolveMessage(request);
@@ -90,10 +96,11 @@ public class AgentRuntimeService {
         List<AgentMessage> history = conversationService.history(
                 conversationId, userId, historyLimit);
         List<String> retrieval = memoryService.retrieve(message, userId, conversationId);
-        ToolCallResponse response = toolCallingService.chatWithMessages(
+        ToolCallResponse response = toolCallingService.chatWithMessagesStream(
                 promptMessages(history, systemPrompt(userId, subject, artifact, retrieval), message),
                 allowedTools(request),
-                context
+                context,
+                listener
         );
 
         conversationService.append(conversationId, userId, "user", message,

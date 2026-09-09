@@ -50,16 +50,32 @@ public class ToolCallingService {
                 context == null ? AgentContext.anonymous() : context);
     }
 
+    /** 流式监听：phase 为阶段变化（thinking/tools/replying），delta 为最终回复文本增量。 */
+    public interface StreamListener {
+        void onPhase(String phase, String detail);
+
+        void onDelta(String text);
+
+        void onToolResult(ToolCallResult result);
+    }
+
     public ToolCallResponse chatWithMessages(JSONArray messages,
                                              Set<String> allowedToolNames,
                                              AgentContext context) {
+        return chatWithMessagesStream(messages, allowedToolNames, context, null);
+    }
+
+    public ToolCallResponse chatWithMessagesStream(JSONArray messages,
+                                                   Set<String> allowedToolNames,
+                                                   AgentContext context,
+                                                   StreamListener listener) {
         String traceId = UUID.randomUUID().toString().substring(0, 8);
         return executeToolLoop(messages, allowedToolNames, traceId,
-                context == null ? AgentContext.anonymous() : context);
+                context == null ? AgentContext.anonymous() : context, listener);
     }
 
     private ToolCallResponse executeToolLoop(JSONArray messages, Set<String> allowedToolNames,
-                                              String traceId, AgentContext context) {
+                                              String traceId, AgentContext context, StreamListener listener) {
         JSONArray tools = toolBroker.buildSchema(allowedToolNames, context);
         List<ToolCallResult> toolCallHistory = new ArrayList<>();
         List<Path> generatedFiles = new ArrayList<>();
@@ -72,9 +88,14 @@ public class ToolCallingService {
             boolean toolsDispatched = false;
             log.info("[Trace:{}] Iteration {}/{}, messages: {}",
                     traceId, iterations, MAX_ITERATIONS, messages.size());
+            if (listener != null) {
+                listener.onPhase("thinking", "第 " + iterations + " 轮");
+            }
 
             try {
-                JSONObject response = llmService.chatWithTools(messages, tools);
+                JSONObject response = listener == null
+                        ? llmService.chatWithTools(messages, tools)
+                        : llmService.chatWithToolsStream(messages, tools, listener::onDelta);
 
                 long iterationTokens = extractTokens(response);
                 totalTokens += iterationTokens;
@@ -90,6 +111,9 @@ public class ToolCallingService {
                     List<ToolCallInfo> toolCalls = parseToolCalls(response);
                     log.info("[Trace:{}] Found {} tool calls, executing concurrently",
                             traceId, toolCalls.size());
+                    if (listener != null) {
+                        listener.onPhase("tools", toolCalls.size() + " 个工具");
+                    }
 
                     Map<String, ToolCallInfo> callsById = new LinkedHashMap<>();
                     Map<String, Future<ToolCallResult>> futureMap = new LinkedHashMap<>();
@@ -105,6 +129,9 @@ public class ToolCallingService {
                         ToolCallInfo info = callsById.get(entry.getKey());
                         ToolCallResult callResult = awaitTool(entry.getValue(), info, traceId);
                         toolCallHistory.add(callResult);
+                        if (listener != null) {
+                            listener.onToolResult(callResult);
+                        }
 
                         JSONObject toolMsg = new JSONObject();
                         toolMsg.put("role", "tool");
@@ -173,7 +200,9 @@ public class ToolCallingService {
                 : "处理请求超时，请稍后重试";
 
         try {
-            JSONObject lastResponse = llmService.chatWithTools(messages, new JSONArray());
+            JSONObject lastResponse = listener == null
+                    ? llmService.chatWithTools(messages, new JSONArray())
+                    : llmService.chatWithToolsStream(messages, new JSONArray(), listener::onDelta);
             long fallbackTokens = extractTokens(lastResponse);
             totalTokens += fallbackTokens;
 

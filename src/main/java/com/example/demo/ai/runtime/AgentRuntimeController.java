@@ -8,6 +8,8 @@ import com.example.demo.agent.service.ArtifactService;
 import com.example.demo.agent.service.CareEventRecorder;
 import com.example.demo.agent.service.SubjectDirectoryService;
 import com.example.demo.ai.ToolBroker;
+import com.example.demo.ai.ToolCallResult;
+import com.example.demo.ai.ToolCallingService;
 import com.example.demo.care.model.CareRecord;
 import com.example.demo.care.service.CareRecordService;
 import jakarta.servlet.http.HttpSession;
@@ -26,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -66,6 +69,71 @@ public class AgentRuntimeController {
     public ResponseEntity<AgentChatResponse> message(@RequestBody AgentChatRequest request,
                                                      HttpSession session) {
         return ResponseEntity.ok(agentRuntimeService.chat(request, session));
+    }
+
+    /**
+     * 流式消息端点（SSE）。事件协议：
+     * phase（thinking/tools 阶段变化）、delta（回复文本增量，打字机直出）、
+     * tool（单个工具执行结果）、done（完整 AgentChatResponse）、error。
+     * 鉴权在请求线程同步完成；同步端点 /api/agent/messages 保留为回滚路径。
+     */
+    @PostMapping("/messages/stream")
+    public SseEmitter messageStream(@RequestBody AgentChatRequest request, HttpSession session) {
+        String userId = currentUser(session);
+        SseEmitter emitter = new SseEmitter(180_000L);
+
+        Thread worker = new Thread(() -> {
+            try {
+                AgentChatResponse response = agentRuntimeService.chat(request, session,
+                        new ToolCallingService.StreamListener() {
+                            @Override
+                            public void onPhase(String phase, String detail) {
+                                send(emitter, "phase", Map.of(
+                                        "phase", phase, "detail", detail == null ? "" : detail));
+                            }
+
+                            @Override
+                            public void onDelta(String text) {
+                                send(emitter, "delta", Map.of("text", text));
+                            }
+
+                            @Override
+                            public void onToolResult(ToolCallResult result) {
+                                send(emitter, "tool", Map.of(
+                                        "toolName", result.getToolName(),
+                                        "success", result.isSuccess(),
+                                        "durationMs", result.getDurationMs(),
+                                        "arguments", result.getArguments() == null
+                                                ? Map.of() : result.getArguments(),
+                                        "result", result.getResult() == null ? "" : result.getResult(),
+                                        "errorMessage", result.getErrorMessage() == null
+                                                ? "" : result.getErrorMessage()));
+                            }
+                        });
+                send(emitter, "done", response);
+                emitter.complete();
+            } catch (Exception e) {
+                try {
+                    send(emitter, "error", Map.of("error",
+                            e.getMessage() == null ? "Agent 处理失败" : e.getMessage()));
+                } catch (Exception ignored) {
+                    // 客户端已断开
+                }
+                emitter.complete();
+            }
+        }, "agent-sse-" + userId);
+        worker.setDaemon(true);
+        worker.start();
+        return emitter;
+    }
+
+    private void send(SseEmitter emitter, String name, Object data) {
+        try {
+            emitter.send(SseEmitter.event().name(name).data(data, MediaType.APPLICATION_JSON));
+        } catch (Exception e) {
+            // 客户端断开时终止整个流式任务，避免继续烧 LLM/工具调用
+            throw new IllegalStateException("SSE 发送失败：" + e.getMessage(), e);
+        }
     }
 
     @GetMapping("/subjects")

@@ -30,6 +30,11 @@ class AgentRuntimeControllerIntegrationTest {
         mockMvc.perform(get("/api/agent/subjects"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error").exists());
+
+        // 流式端点同样在请求线程同步鉴权
+        mockMvc.perform(post("/api/agent/messages/stream").contentType("application/json")
+                        .content("{\"message\":\"你好\"}"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
