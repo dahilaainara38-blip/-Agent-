@@ -56,18 +56,4 @@ public class PushController {
             return Result.error("推送取消订阅失败：" + e.getMessage());
         }
     }
-
-    @PostMapping("/test")
-    public Result<String> testPush(HttpSession session) {
-        String userId = (String) session.getAttribute("user");
-        if (userId == null) return Result.error("未登录");
-
-        try {
-            webPushService.sendPushToUser(userId, "Sekai PetPlant", "这是一条测试推送通知", "/home.html");
-            return Result.success("测试推送已发送");
-        } catch (Exception e) {
-            logger.error("Test push failed: {}", userId, e);
-            return Result.error("测试推送发送失败：" + e.getMessage());
-        }
-    }
 }

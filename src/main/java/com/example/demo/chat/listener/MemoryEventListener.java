@@ -1,8 +1,6 @@
 package com.example.demo.chat.listener;
 
-import com.example.demo.chat.ChatMemoryService;
 import com.example.demo.chat.VectorStoreService;
-import com.example.demo.chat.event.SummaryUpdateEvent;
 import com.example.demo.chat.event.VectorSaveEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,15 +10,13 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class MemoryEventListener {
-    
+
     private static final Logger logger = LoggerFactory.getLogger(MemoryEventListener.class);
-    
+
     private final VectorStoreService vectorStoreService;
-    private final ChatMemoryService chatMemoryService;
-    
-    public MemoryEventListener(VectorStoreService vectorStoreService, ChatMemoryService chatMemoryService) {
+
+    public MemoryEventListener(VectorStoreService vectorStoreService) {
         this.vectorStoreService = vectorStoreService;
-        this.chatMemoryService = chatMemoryService;
     }
     
     @EventListener
@@ -51,19 +47,6 @@ public class MemoryEventListener {
                     return;
                 }
             }
-        }
-    }
-    
-    @EventListener
-    @Async("summaryTaskExecutor")
-    public void handleSummaryUpdateEvent(SummaryUpdateEvent event) {
-        try {
-            logger.debug("Processing SummaryUpdateEvent for conversation: {}", event.getConversationId());
-            chatMemoryService.checkAndUpdateSummary(event.getConversationId());
-            logger.debug("Summary updated successfully for conversation: {}", event.getConversationId());
-        } catch (Exception e) {
-            logger.error("Failed to update summary asynchronously for conversation: {}", 
-                    event.getConversationId(), e);
         }
     }
 }
