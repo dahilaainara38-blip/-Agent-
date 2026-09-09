@@ -3,6 +3,7 @@ package com.example.demo.ai.runtime;
 import com.example.demo.agent.domain.Artifact;
 import com.example.demo.agent.domain.CareSubject;
 import com.example.demo.agent.service.ActionConfirmationService;
+import com.example.demo.agent.service.AgentConversationService;
 import com.example.demo.agent.service.ArtifactService;
 import com.example.demo.ai.ToolBroker;
 import jakarta.servlet.http.HttpSession;
@@ -33,15 +34,18 @@ public class AgentRuntimeController {
     private final ArtifactService artifactService;
     private final ActionConfirmationService confirmationService;
     private final ToolBroker toolBroker;
+    private final AgentConversationService conversationService;
 
     public AgentRuntimeController(AgentRuntimeService agentRuntimeService,
                                   ArtifactService artifactService,
                                   ActionConfirmationService confirmationService,
-                                  ToolBroker toolBroker) {
+                                  ToolBroker toolBroker,
+                                  AgentConversationService conversationService) {
         this.agentRuntimeService = agentRuntimeService;
         this.artifactService = artifactService;
         this.confirmationService = confirmationService;
         this.toolBroker = toolBroker;
+        this.conversationService = conversationService;
     }
 
     @PostMapping("/messages")
@@ -60,6 +64,36 @@ public class AgentRuntimeController {
     @PostMapping("/conversations/new")
     public ResponseEntity<Map<String, Object>> newConversation(HttpSession session) {
         return ResponseEntity.ok(Map.of("conversationId", agentRuntimeService.newConversation(session)));
+    }
+
+    @GetMapping("/conversations")
+    public ResponseEntity<List<Map<String, Object>>> conversations(HttpSession session) {
+        String userId = currentUser(session);
+        return ResponseEntity.ok(conversationService.recent(userId).stream()
+                .map(conversation -> Map.<String, Object>of(
+                        "conversationId", conversation.getConversationId(),
+                        "summary", conversation.getSummary() == null ? "" : conversation.getSummary(),
+                        "subjectId", conversation.getCurrentSubjectId() == null
+                                ? 0L : conversation.getCurrentSubjectId(),
+                        "status", conversation.getStatus(),
+                        "updatedAt", conversation.getUpdatedAt().toString()
+                ))
+                .toList());
+    }
+
+    @GetMapping("/conversations/{conversationId}/messages")
+    public ResponseEntity<List<Map<String, Object>>> conversationMessages(
+            @PathVariable String conversationId, HttpSession session) {
+        String userId = currentUser(session);
+        return ResponseEntity.ok(conversationService.history(conversationId, userId, 200).stream()
+                .map(message -> Map.<String, Object>of(
+                        "messageId", message.getMessageId(),
+                        "role", message.getRole(),
+                        "content", message.getContent(),
+                        "artifactId", message.getArtifactId() == null ? "" : message.getArtifactId(),
+                        "createdAt", message.getCreatedAt().toString()
+                ))
+                .toList());
     }
 
     @GetMapping("/tools")

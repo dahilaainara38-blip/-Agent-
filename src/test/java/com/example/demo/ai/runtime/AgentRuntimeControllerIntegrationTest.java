@@ -83,6 +83,23 @@ class AgentRuntimeControllerIntegrationTest {
                 .andExpect(status().isOk());
     }
 
+    @Test
+    void conversationHistoryEndpointsRequireAuthenticationAndRespectOwnership() throws Exception {
+        mockMvc.perform(get("/api/agent/conversations"))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get("/api/agent/conversations/agent_x/messages"))
+                .andExpect(status().isUnauthorized());
+
+        MockHttpSession session = authenticated();
+        mockMvc.perform(get("/api/agent/conversations").session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+        // 他人/不存在的会话不抛错也不泄露内容，返回空历史
+        mockMvc.perform(get("/api/agent/conversations/agent_other/messages").session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+    }
+
     private MockHttpSession authenticated() {
         MockHttpSession session = new MockHttpSession();
         session.setAttribute("user", "integration-user");

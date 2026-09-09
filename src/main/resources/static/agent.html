@@ -554,6 +554,10 @@
             <div class="panel-head">护理对象</div>
             <div class="subject-list" id="subjects"></div>
         </section>
+        <section class="panel">
+            <div class="panel-head">历史会话</div>
+            <div class="subject-list" id="conversations"><div class="empty">暂无会话</div></div>
+        </section>
     </aside>
 
     <section class="panel conversation">
@@ -602,8 +606,11 @@ const state = {
     artifactUrl: null,
     uploading: false,
     conversationId: null,
+    conversations: [],
     sending: false
 };
+
+const CONVERSATION_KEY = 'agentConversationId';
 
 const messages = document.getElementById('messages');
 const emptyState = document.getElementById('emptyState');
@@ -718,6 +725,7 @@ async function newConversation() {
     if (!response.ok) throw new Error('会话创建失败');
     const result = await response.json();
     state.conversationId = result.conversationId;
+    localStorage.setItem(CONVERSATION_KEY, state.conversationId);
     messages.innerHTML = '';
     messages.appendChild(emptyState);
     emptyState.style.display = 'flex';
@@ -725,6 +733,86 @@ async function newConversation() {
     files.innerHTML = '';
     sessionDetail.textContent = state.conversationId;
     resetImage();
+    renderConversations();
+}
+
+async function loadConversations() {
+    const response = await fetch('/api/agent/conversations');
+    if (response.status === 401) {
+        location.href = '/login';
+        return;
+    }
+    if (!response.ok) return;
+    state.conversations = await response.json();
+    renderConversations();
+}
+
+function renderConversations() {
+    const list = document.getElementById('conversations');
+    if (!list) return;
+    list.innerHTML = '';
+    if (!state.conversations.length) {
+        list.innerHTML = '<div class="empty">暂无会话</div>';
+        return;
+    }
+    state.conversations.forEach(item => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `subject${item.conversationId === state.conversationId ? ' active' : ''}`;
+        button.innerHTML = `
+            <span class="subject-icon">${escapeHtml((item.summary || '会话').slice(0, 1).toUpperCase())}</span>
+            <span>
+                <span class="subject-name">${escapeHtml(item.summary || '新会话')}</span>
+                <span class="subject-meta">${escapeHtml(formatTime(item.updatedAt))}</span>
+            </span>`;
+        button.addEventListener('click', () => openConversation(item.conversationId));
+        list.appendChild(button);
+    });
+}
+
+function formatTime(iso) {
+    if (!iso) return '';
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return '';
+    const pad = value => String(value).padStart(2, '0');
+    return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+async function openConversation(conversationId) {
+    const response = await fetch(`/api/agent/conversations/${conversationId}/messages`);
+    if (response.status === 401) {
+        location.href = '/login';
+        throw new Error('未登录');
+    }
+    if (!response.ok) throw new Error('会话加载失败');
+    const history = await response.json();
+
+    state.conversationId = conversationId;
+    localStorage.setItem(CONVERSATION_KEY, conversationId);
+    messages.innerHTML = '';
+    messages.appendChild(emptyState);
+    emptyState.style.display = history.length ? 'none' : 'flex';
+    history.forEach(item => {
+        addMessage(item.role, item.content,
+            item.artifactId ? `/api/agent/artifacts/${item.artifactId}/content` : null);
+    });
+    sessionDetail.textContent = conversationId;
+    resetImage();
+    renderConversations();
+    await refreshTraces(conversationId);
+}
+
+async function refreshTraces(conversationId) {
+    try {
+        const response = await fetch(`/api/agent/traces/${conversationId}`);
+        if (!response.ok) {
+            renderTrace([]);
+            return;
+        }
+        renderTrace(await response.json());
+    } catch (error) {
+        renderTrace([]);
+    }
 }
 
 function renderTrace(history) {
@@ -734,12 +822,14 @@ function renderTrace(history) {
         return;
     }
     history.forEach(call => {
+        // 消息响应返回 toolCallHistory（success 布尔），traces API 返回 status 字符串
+        const ok = call.success ?? call.status === 'SUCCESS';
         const item = document.createElement('div');
         item.className = 'trace';
         item.innerHTML = `
             <div class="trace-top">
                 <span>${escapeHtml(call.toolName)}</span>
-                <span class="trace-status${call.success ? '' : ' error'}">${call.success ? '成功' : '失败'} · ${call.durationMs}ms</span>
+                <span class="trace-status${ok ? '' : ' error'}">${ok ? '成功' : '失败'} · ${call.durationMs}ms</span>
             </div>
             <pre>参数：${escapeHtml(JSON.stringify(call.arguments ?? {}, null, 2))}
 结果：${escapeHtml(call.result || call.errorMessage || '-')}</pre>`;
@@ -853,11 +943,13 @@ async function sendMessage(event) {
             throw new Error(result.error || '发送失败');
         }
         state.conversationId = result.conversationId;
+        localStorage.setItem(CONVERSATION_KEY, result.conversationId);
         sessionDetail.textContent = result.conversationId;
         const assistant = addMessage('assistant', result.reply || '未返回内容');
         appendCards(assistant.querySelector('.bubble'), result.cards);
         renderTrace(result.toolCallHistory);
         renderFiles(result.generatedFiles);
+        loadConversations();
     } catch (error) {
         addMessage('assistant', `处理失败：${error.message}`);
     } finally {
@@ -910,7 +1002,19 @@ async function uploadArtifact(file) {
     }
 }
 
-Promise.all([loadIdentity(), loadSubjects(), newConversation()]).catch(error => {
+Promise.all([loadIdentity(), loadSubjects()]).then(async () => {
+    await loadConversations();
+    const stored = localStorage.getItem(CONVERSATION_KEY);
+    if (stored) {
+        try {
+            await openConversation(stored);
+            return;
+        } catch (error) {
+            // 存储的会话已失效（过期/不属于当前用户），回退新建
+        }
+    }
+    await newConversation();
+}).catch(error => {
     authName.textContent = error.message;
 });
 </script>

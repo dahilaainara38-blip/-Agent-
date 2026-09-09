@@ -57,8 +57,13 @@ public class AgentConversationService {
     @Transactional
     public AgentMessage append(String conversationId, String userId, String role,
                                String content, String artifactId, String traceId) {
-        conversationRepository.findByConversationIdAndUserId(conversationId, userId)
+        AgentConversation conversation = conversationRepository
+                .findByConversationIdAndUserId(conversationId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("会话不存在或不属于当前用户"));
+        if (conversation.getSummary() == null || conversation.getSummary().isBlank()) {
+            conversation.setSummary(summarize(content));
+        }
+        conversation.setUpdatedAt(LocalDateTime.now());
         return messageRepository.save(AgentMessage.builder()
                 .messageId("msg_" + UUID.randomUUID())
                 .conversationId(conversationId)
@@ -69,5 +74,18 @@ public class AgentConversationService {
                 .traceId(traceId)
                 .createdAt(LocalDateTime.now())
                 .build());
+    }
+
+    @Transactional(readOnly = true)
+    public List<AgentConversation> recent(String userId) {
+        return conversationRepository.findTop20ByUserIdOrderByUpdatedAtDesc(userId);
+    }
+
+    private String summarize(String content) {
+        if (content == null || content.isBlank()) {
+            return null;
+        }
+        String flat = content.replaceAll("\\s+", " ").trim();
+        return flat.length() <= 80 ? flat : flat.substring(0, 80) + "…";
     }
 }
