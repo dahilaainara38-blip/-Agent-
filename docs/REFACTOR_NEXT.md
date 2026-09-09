@@ -45,7 +45,7 @@
 
 ## P3 体验与部署（可选）
 
-16. **SSE 流式输出**：未实施——`LlmService` 为阻塞式 JSON 返回，流式需从 HTTP 客户端层开始改造（流式方法 + 工具循环与流式的衔接策略：仅最终文本轮可流式 + SSE 端点 + 前端 EventSource），建议作为独立迭代规划
+16. ~~SSE 流式输出~~ **已完成**（`63d640a`）：`POST /api/agent/messages/stream`（SseEmitter）。`LlmService.chatWithToolsStream` 逐行解析 provider SSE 并重组 tool_calls 分片，产出与非流式同形的响应；工具循环以 `StreamListener` 贯通 phase/delta/tool 事件；agent.html 用 fetch + ReadableStream 打字机渲染。同步端点保留为回滚路径
 17. **uploads 对象存储**：未实施——需要 OSS/S3 凭证与外部服务，环境就绪后可做；短期可先按日期子目录归档缓解换机丢链接问题
 18. ~~回归测试补齐 golden case 5-7~~ **已完成**（`94530c8`）：上下文注入（档案+护理事件进 system prompt）、图片→analyzeImage（artifact 路径）、病害诊断（纯读不落库），golden case 共 7 条全绿
 
