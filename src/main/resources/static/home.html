@@ -975,24 +975,17 @@
 
 <div class="footer">Sekai PetPlant &copy; 2026 · 用心守护每一个小生命</div>
 
+<script src="/js/auth.js"></script>
+<script src="/js/push.js"></script>
 <script>
-const VAPID_PUBLIC_KEY = 'BMaNpciuS15Tqj9lE27TvS67e0Dwa0yiQD3SKya1OwnoAPnrVlust4JLM3NvhdQPVz-np174cixSInkmGbbFj_M';
-const SW_PATH = '/js/service-worker.js';
-
 // Init
-fetch('/api/auth/me').then(r => r.json()).then(data => {
-    if (data.code === 200) {
-        var hour = new Date().getHours();
-        var period = hour < 12 ? '早上好' : (hour < 18 ? '下午好' : '晚上好');
-        document.getElementById('greeting').textContent = period + '，' + data.data.userName;
-        document.getElementById('greetingName').textContent = data.data.userName;
-        loadStats();
-        checkPushStatus();
-    } else {
-        location.href = '/login';
-    }
-}).catch(() => {
-    location.href = '/login';
+careAuth.ensure(userName => {
+    var hour = new Date().getHours();
+    var period = hour < 12 ? '早上好' : (hour < 18 ? '下午好' : '晚上好');
+    document.getElementById('greeting').textContent = period + '，' + userName;
+    document.getElementById('greetingName').textContent = userName;
+    loadStats();
+    checkPushStatus();
 });
 
 document.getElementById('todayDate').textContent = new Date().toLocaleDateString('zh-CN', {
@@ -1039,70 +1032,10 @@ function selectSystem(type) {
 }
 
 function logout() {
-    fetch('/api/auth/logout', { method: 'POST' }).then(() => location.href = '/login');
+    careAuth.logout();
 }
 
 // Push
-async function checkPushStatus() {
-    const toggle = document.getElementById('pushToggle');
-    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-        toggle.disabled = true;
-        return;
-    }
-    try {
-        const reg = await navigator.serviceWorker.register(SW_PATH);
-        const sub = await reg.pushManager.getSubscription();
-        toggle.checked = !!sub;
-    } catch (e) {}
-}
-
-async function togglePush() {
-    const toggle = document.getElementById('pushToggle');
-    try {
-        const reg = await navigator.serviceWorker.getRegistration(SW_PATH) ||
-            await navigator.serviceWorker.register(SW_PATH);
-
-        if (toggle.checked) {
-            const sub = await reg.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: urlB64ToUint8Array(VAPID_PUBLIC_KEY)
-            });
-            const p256dh = btoa(String.fromCharCode.apply(null, new Uint8Array(sub.getKey('p256dh'))));
-            const auth = btoa(String.fromCharCode.apply(null, new Uint8Array(sub.getKey('auth'))));
-            const res = await fetch('/api/push/subscribe', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    endpoint: sub.endpoint,
-                    p256dh: p256dh,
-                    auth: auth,
-                    userAgent: navigator.userAgent
-                })
-            });
-            const data = await res.json();
-            if (data.code !== 200) throw new Error(data.message || 'subscribe failed');
-        } else {
-            const sub = await reg.pushManager.getSubscription();
-            if (sub) {
-                await sub.unsubscribe();
-                await fetch('/api/push/unsubscribe', {
-                    method: 'DELETE',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ endpoint: sub.endpoint })
-                });
-            }
-        }
-    } catch (e) {
-        toggle.checked = !toggle.checked;
-    }
-}
-
-function urlB64ToUint8Array(base64String) {
-    const padding = '='.repeat((4 - base64String.length % 4) % 4);
-    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-    const rawData = atob(base64);
-    return new Uint8Array([...rawData].map(c => c.charCodeAt(0)));
-}
 </script>
 </body>
 </html>

@@ -412,6 +412,7 @@
 <!-- Toast Container -->
 <div class="toast-container" id="toastContainer"></div>
 
+<script src="/js/auth.js"></script>
 <script>
 let allItems = [];
 let currentFilter = 'ALL';
@@ -433,10 +434,7 @@ function setGreeting() {
     else if (hour < 14) greeting = '中午好';
     else if (hour < 18) greeting = '下午好';
     else greeting = '晚上好';
-    fetch('/api/auth/me').then(r => r.json()).then(d => {
-        if (d.code === 200) document.getElementById('greeting').textContent = greeting + '，' + d.data.userName;
-        else location.href = '/login';
-    });
+    careAuth.ensure(name => document.getElementById('greeting').textContent = greeting + '，' + name);
 }
 setGreeting();
 

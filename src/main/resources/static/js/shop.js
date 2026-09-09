@@ -7,13 +7,8 @@ let sortBy = 'default';
 
 async function init() {
     try {
-        const r = await fetch('/api/auth/me');
-        const x = await r.json();
-        if (x.code !== 200) {
-            location.href = '/login';
-            return;
-        }
-        document.getElementById('userName').textContent = x.data.userName;
+        const name = await careAuth.ensure();
+        document.getElementById('userName').textContent = name;
     } catch (e) {
         location.href = '/login';
     }
@@ -202,8 +197,7 @@ function toast(s) {
 }
 
 async function logout() {
-    await fetch('/api/auth/logout', { method: 'POST' });
-    location.href = '/login';
+    careAuth.logout();
 }
 
 init();

@@ -1308,6 +1308,7 @@
         </div>
     </div>
 
+    <script src="/js/auth.js"></script>
     <script>
         let currentUser = null;
         let currentUserName = null;
@@ -1356,24 +1357,16 @@
         }
 
         // ============ Auth check ============
-        fetch('/api/auth/me').then(function(r) { return r.json(); }).then(function(data) {
-            if (data.code === 200) {
-                currentUser = data.data.userName || data.data.user;
-                currentUserName = data.data.userName || data.data.user;
-                document.getElementById('greeting').textContent = getGreeting() + '，' + currentUserName;
-                loadTagCloud();
-                loadPosts();
-            } else {
-                location.href = '/login';
-            }
-        }).catch(function() {
-            location.href = '/login';
+        careAuth.ensure(function(name) {
+            currentUser = name;
+            currentUserName = name;
+            document.getElementById('greeting').textContent = getGreeting() + '，' + currentUserName;
+            loadTagCloud();
+            loadPosts();
         });
 
         function logout() {
-            fetch('/api/auth/logout', { method: 'POST' }).then(function() {
-                location.href = '/login';
-            });
+            careAuth.logout();
         }
 
         // ============ Category Tabs ============

@@ -61,13 +61,11 @@
     </div>
 </main>
 <div id="toast"></div>
+<script src="/js/auth.js"></script>
 <script>
 let selectedCategories = [];
 
-fetch('/api/auth/me').then(r => r.json()).then(x => {
-    if(x.code!==200)location.href='/login';
-    else userName.textContent=x.data.userName;
-});
+careAuth.ensure(name => userName.textContent = name);
 
 function toast(s){
     const e=document.getElementById('toast');
@@ -162,7 +160,7 @@ document.getElementById('publishForm').addEventListener('submit',async function(
     }catch(e){toast('网络异常')}
 });
 
-async function logout(){await fetch('/api/auth/logout',{method:'POST'});location.href='/login'}
+function logout(){careAuth.logout()}
 
 loadCategories();
 </script>

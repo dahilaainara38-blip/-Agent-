@@ -693,6 +693,7 @@
     </aside>
 </main>
 
+<script src="/js/auth.js"></script>
 <script>
 const state = {
     subjects: [],
@@ -865,13 +866,7 @@ function renderSubjectRecords(records) {
 }
 
 async function loadIdentity() {
-    const response = await fetch('/api/auth/me');
-    const result = await response.json();
-    if (result.code !== 200) {
-        location.href = '/login';
-        return;
-    }
-    authName.textContent = result.data.userName;
+    authName.textContent = await careAuth.ensure();
 }
 
 async function loadSubjects() {
