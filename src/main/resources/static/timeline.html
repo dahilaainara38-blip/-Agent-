@@ -986,13 +986,14 @@ async function switchTargetType(type) {
 }
 
 async function loadTargets(type) {
-    const res = await fetch('/api/care/targets/' + type);
-    const data = await res.json();
-    if (data.code !== 200) {
-        showToast('加载失败，请稍后重试', 'error');
+    const res = await fetch('/api/agent/subjects');
+    if (res.status === 401) {
+        location.href = '/login';
         return;
     }
-    currentTargets = data.data;
+    const data = await res.json();
+    // agent 域返回带归属的档案；sourceId 即工具/时间线使用的目标 ID
+    currentTargets = (data || []).filter(t => t.type === type);
     renderTargetSelector();
 }
 
@@ -1007,9 +1008,9 @@ function renderTargetSelector() {
     }
     let html = '<span class="target-selector-hint" style="margin-right:8px;">选择要查看的对象：</span>';
     currentTargets.forEach((t) => {
-        const active = currentTargetId === t.id ? ' active' : '';
+        const active = currentTargetId === t.sourceId ? ' active' : '';
         const icon = currentTargetType === 'PET' ? '🐱' : '🌿';
-        html += '<div class="target-card' + active + '" onclick="selectTarget(' + t.id + ', this)" data-id="' + t.id + '">';
+        html += '<div class="target-card' + active + '" onclick="selectTarget(' + t.sourceId + ', this)" data-id="' + t.sourceId + '">';
         html += '<div class="avatar">' + icon + '</div>';
         html += '<div class="name">' + escapeHtml(t.name) + '</div>';
         if (t.species) html += '<div class="species">' + escapeHtml(t.species) + '</div>';

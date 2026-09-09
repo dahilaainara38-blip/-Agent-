@@ -8,6 +8,7 @@ import com.example.demo.agent.service.ArtifactService;
 import com.example.demo.agent.service.CareEventRecorder;
 import com.example.demo.agent.service.SubjectDirectoryService;
 import com.example.demo.ai.ToolBroker;
+import com.example.demo.care.model.CareRecord;
 import com.example.demo.care.service.CareRecordService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.core.io.FileSystemResource;
@@ -117,6 +118,52 @@ public class AgentRuntimeController {
                         "createdAt", record.getCreatedAt() == null ? "" : record.getCreatedAt().toString()
                 ))
                 .toList());
+    }
+
+    /** care.html「新增记录」按钮的显式写路径（对话内记录走 saveCareRecord 确认卡）。 */
+    @PostMapping("/subjects/{id}/records")
+    public ResponseEntity<Map<String, Object>> addSubjectRecord(@PathVariable Long id,
+                                                                @RequestBody Map<String, String> body,
+                                                                HttpSession session) {
+        String userId = currentUser(session);
+        SubjectDirectoryService.ResolvedSubject resolved = subjectDirectory
+                .resolve(userId, null, id)
+                .orElseThrow(() -> new IllegalArgumentException("档案不存在或不属于当前用户"));
+        String content = body.get("content");
+        if (content == null || content.isBlank()) {
+            throw new IllegalArgumentException("记录内容不能为空");
+        }
+        CareSubject subject = resolved.subject();
+        CareRecord.RecordType recordType = parseRecordType(body.get("recordType"));
+        CareRecord record = careRecordService.createRecord(CareRecord.builder()
+                .userId(userId)
+                .targetType(subject.getSubjectType() == CareSubject.SubjectType.PET
+                        ? CareRecord.TargetType.PET : CareRecord.TargetType.PLANT)
+                .targetId(resolved.effectiveSubjectId())
+                .recordType(recordType)
+                .content(content.trim())
+                .build());
+        careEventRecorder.record(userId, subject.getSubjectType().name(), resolved.effectiveSubjectId(),
+                "CARE_RECORD_SAVE",
+                Map.of("recordType", recordType.name(), "content", content.trim()),
+                "REST", "rest_agent_record_" + record.getId());
+        return ResponseEntity.ok(Map.of(
+                "id", record.getId(),
+                "recordType", record.getRecordType().name(),
+                "content", record.getContent(),
+                "createdAt", record.getCreatedAt() == null ? "" : record.getCreatedAt().toString()
+        ));
+    }
+
+    private CareRecord.RecordType parseRecordType(String recordType) {
+        if (recordType == null || recordType.isBlank()) {
+            return CareRecord.RecordType.CARE;
+        }
+        try {
+            return CareRecord.RecordType.valueOf(recordType.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return CareRecord.RecordType.CARE;
+        }
     }
 
     @PostMapping("/conversations/new")
