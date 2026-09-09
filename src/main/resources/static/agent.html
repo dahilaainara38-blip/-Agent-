@@ -195,6 +195,84 @@
             white-space: nowrap;
         }
 
+        .subject-row {
+            position: relative;
+        }
+
+        .subject-remove {
+            position: absolute;
+            top: 6px;
+            right: 6px;
+            display: none;
+            width: 22px;
+            height: 22px;
+            border: 0;
+            border-radius: 4px;
+            background: #f6d8d8;
+            color: #a33;
+            cursor: pointer;
+            font-size: 13px;
+            line-height: 1;
+        }
+
+        .subject-row:hover .subject-remove {
+            display: block;
+        }
+
+        .subject-form {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 8px;
+        }
+
+        .subject-form select,
+        .subject-form input {
+            padding: 6px 8px;
+            border: 1px solid #d5e2d8;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        .add-subject {
+            margin: 4px 8px 8px;
+            padding: 8px;
+            border: 1px dashed #b7cec0;
+            border-radius: 6px;
+            background: transparent;
+            color: var(--green);
+            cursor: pointer;
+        }
+
+        .record-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 240px;
+            overflow: auto;
+            padding: 8px;
+        }
+
+        .record-item {
+            border-left: 3px solid #dcebe1;
+            padding: 4px 8px;
+        }
+
+        .record-type {
+            color: var(--green);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .record-content {
+            font-size: 13px;
+        }
+
+        .record-time {
+            color: var(--muted);
+            font-size: 11px;
+        }
+
         .conversation {
             display: flex;
             min-height: calc(100vh - 104px);
@@ -553,6 +631,19 @@
         <section class="panel">
             <div class="panel-head">护理对象</div>
             <div class="subject-list" id="subjects"></div>
+            <form class="subject-form" id="subjectForm" hidden>
+                <select id="newSubjectType" aria-label="类型">
+                    <option value="PET">宠物</option>
+                    <option value="PLANT">植物</option>
+                </select>
+                <input id="newSubjectName" placeholder="名字" required maxlength="50">
+                <input id="newSubjectSpecies" placeholder="品种（选填）" maxlength="50">
+                <div class="action-buttons">
+                    <button class="confirm-button" type="submit">保存档案</button>
+                    <button class="cancel-button" type="button" id="cancelSubject">取消</button>
+                </div>
+            </form>
+            <button class="add-subject" id="addSubject" type="button">＋ 新建档案</button>
         </section>
         <section class="panel">
             <div class="panel-head">历史会话</div>
@@ -581,6 +672,10 @@
     </section>
 
     <aside class="side-column context">
+        <section class="panel">
+            <div class="panel-head">护理记录</div>
+            <div class="record-list" id="subjectRecords"><div class="empty">选择对象后显示</div></div>
+        </section>
         <section class="panel">
             <div class="panel-head">执行轨迹</div>
             <div class="trace-list" id="traceList">
@@ -672,6 +767,9 @@ function renderSubjects() {
         option.textContent = `${subject.type === 'PET' ? '宠物' : '植物'} · ${subject.name}`;
         subjectSelect.appendChild(option);
 
+        const row = document.createElement('div');
+        row.className = 'subject-row';
+
         const button = document.createElement('button');
         button.type = 'button';
         button.className = `subject${subject.id === state.selectedSubjectId ? ' active' : ''}`;
@@ -682,14 +780,88 @@ function renderSubjects() {
                 <span class="subject-meta">${subject.type === 'PET' ? '宠物' : '植物'} · ${escapeHtml(subject.species || '未填写品种')}</span>
             </span>`;
         button.addEventListener('click', () => selectSubject(subject.id));
-        subjects.appendChild(button);
+        row.appendChild(button);
+
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'subject-remove';
+        remove.title = '删除档案';
+        remove.textContent = '×';
+        remove.addEventListener('click', event => {
+            event.stopPropagation();
+            deleteSubject(subject);
+        });
+        row.appendChild(remove);
+
+        subjects.appendChild(row);
     });
+}
+
+async function deleteSubject(subject) {
+    if (!window.confirm(`删除档案「${subject.name}」？相关对话记录会保留。`)) return;
+    try {
+        const response = await fetch(`/api/agent/subjects/${subject.id}`, {method: 'DELETE'});
+        if (response.status === 401) {
+            location.href = '/login';
+            return;
+        }
+        if (!response.ok) throw new Error('档案删除失败');
+        if (state.selectedSubjectId === subject.id) {
+            state.selectedSubjectId = null;
+            subjectSelect.value = '';
+        }
+        await loadSubjects();
+        renderSubjectRecords([]);
+    } catch (error) {
+        addMessage('assistant', `档案删除失败：${error.message}`);
+    }
 }
 
 function selectSubject(id) {
     state.selectedSubjectId = id;
     subjectSelect.value = id ? String(id) : '';
     renderSubjects();
+    if (id) {
+        loadSubjectRecords(id);
+    } else {
+        renderSubjectRecords([]);
+    }
+}
+
+async function loadSubjectRecords(subjectId) {
+    try {
+        const response = await fetch(`/api/agent/subjects/${subjectId}/records`);
+        if (!response.ok) {
+            renderSubjectRecords([]);
+            return;
+        }
+        renderSubjectRecords(await response.json());
+    } catch (error) {
+        renderSubjectRecords([]);
+    }
+}
+
+const RECORD_TYPE_LABELS = {
+    MEDICATION: '用药', VITALS: '体征', SYMPTOM: '症状观察', DIAGNOSIS: '诊断',
+    ADVICE: '建议', REMINDER: '提醒', CARE: '日常护理'
+};
+
+function renderSubjectRecords(records) {
+    const list = document.getElementById('subjectRecords');
+    if (!list) return;
+    list.innerHTML = '';
+    if (!records?.length) {
+        list.innerHTML = '<div class="empty">暂无护理记录</div>';
+        return;
+    }
+    records.forEach(record => {
+        const item = document.createElement('div');
+        item.className = 'record-item';
+        item.innerHTML = `
+            <div class="record-type">${escapeHtml(RECORD_TYPE_LABELS[record.recordType] || record.recordType)} · ${escapeHtml(formatTime(record.createdAt))}</div>
+            <div class="record-content">${escapeHtml(record.content || record.title || '-')}</div>`;
+        list.appendChild(item);
+    });
 }
 
 async function loadIdentity() {
@@ -899,6 +1071,11 @@ async function resolveAction(card, button, action) {
             cardNode.querySelector('.action-card-badge').textContent = result.status || '已处理';
             cardNode.querySelector('.action-buttons').remove();
         }
+        // 确认执行可能新建了档案/记录（createCareSubject、saveCareRecord 等），刷新侧栏
+        loadSubjects();
+        if (state.selectedSubjectId) {
+            loadSubjectRecords(state.selectedSubjectId);
+        }
     } catch (error) {
         button.disabled = false;
         button.textContent = action === 'confirm' ? '确认执行' : '取消';
@@ -962,6 +1139,47 @@ document.getElementById('composer').addEventListener('submit', sendMessage);
 document.getElementById('homeButton').addEventListener('click', () => location.href = '/home');
 document.getElementById('newConversation').addEventListener('click', newConversation);
 subjectSelect.addEventListener('change', () => selectSubject(Number(subjectSelect.value) || null));
+
+const subjectForm = document.getElementById('subjectForm');
+document.getElementById('addSubject').addEventListener('click', () => {
+    subjectForm.hidden = false;
+    document.getElementById('newSubjectName').focus();
+});
+document.getElementById('cancelSubject').addEventListener('click', () => {
+    subjectForm.hidden = true;
+    subjectForm.reset();
+});
+subjectForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    const body = {
+        subjectType: document.getElementById('newSubjectType').value,
+        name: document.getElementById('newSubjectName').value.trim(),
+        species: document.getElementById('newSubjectSpecies').value.trim()
+    };
+    if (!body.name) return;
+    try {
+        const response = await fetch('/api/agent/subjects', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(body)
+        });
+        if (response.status === 401) {
+            location.href = '/login';
+            return;
+        }
+        if (!response.ok) {
+            const result = await response.json().catch(() => ({}));
+            throw new Error(result.error || '档案创建失败');
+        }
+        const created = await response.json();
+        subjectForm.hidden = true;
+        subjectForm.reset();
+        await loadSubjects();
+        selectSubject(created.id);
+    } catch (error) {
+        addMessage('assistant', `档案创建失败：${error.message}`);
+    }
+});
 document.getElementById('removeImage').addEventListener('click', resetImage);
 messageInput.addEventListener('keydown', event => {
     if (event.key === 'Enter' && !event.shiftKey) {

@@ -41,13 +41,15 @@ public class ToolBroker {
 
     private static final Set<String> WRITE_TOOLS = Set.of(
             "createCareReminder", "completeCareReminder", "saveMedication",
-            "generateCarePlan", "generateImage", "editImage", "saveDiagnosis"
+            "generateCarePlan", "generateImage", "editImage", "saveDiagnosis",
+            "createCareSubject", "saveCareRecord"
     );
 
     private static final Set<String> IDENTITY_TOOLS = Set.of(
             "analyzeImage", "editImage", "createCareReminder", "completeCareReminder",
             "listCareReminders", "saveMedication", "checkMedication",
-            "compareImages", "generateCarePlan", "diagnoseDisease", "saveDiagnosis"
+            "compareImages", "generateCarePlan", "diagnoseDisease", "saveDiagnosis",
+            "createCareSubject", "saveCareRecord"
     );
 
     private static final Map<String, String> ACTION_TYPES = Map.of(
@@ -57,7 +59,9 @@ public class ToolBroker {
             "generateCarePlan", "CARE_PLAN_GENERATE",
             "generateImage", "IMAGE_GENERATE",
             "editImage", "IMAGE_EDIT",
-            "saveDiagnosis", "DIAGNOSIS_SAVE"
+            "saveDiagnosis", "DIAGNOSIS_SAVE",
+            "createCareSubject", "SUBJECT_CREATE",
+            "saveCareRecord", "CARE_RECORD_SAVE"
     );
 
     private final Map<String, ToolInfo> toolRegistry = new LinkedHashMap<>();
@@ -69,6 +73,7 @@ public class ToolBroker {
     private final ConcurrentHashMap<String, Deque<Long>> userCallLog = new ConcurrentHashMap<>();
 
     public ToolBroker(SpringAiTools springAiTools,
+                      AgentCareTools agentCareTools,
                       WeatherService weatherService,
                       ToolTraceRepository toolTraceRepository,
                       ActionConfirmationRepository confirmationRepository,
@@ -86,6 +91,7 @@ public class ToolBroker {
                     return thread;
                 });
         register(springAiTools);
+        register(agentCareTools);
         register(weatherService);
         log.info("ToolBroker initialized with {} tools", toolRegistry.size());
     }

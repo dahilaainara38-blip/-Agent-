@@ -166,6 +166,8 @@ public class ActionConfirmationService {
             case "IMAGE_GENERATE" -> new Card("IMAGE_GENERATE_CONFIRM", "确认生成图片", payload);
             case "IMAGE_EDIT" -> new Card("IMAGE_EDIT_CONFIRM", "确认编辑图片", payload);
             case "DIAGNOSIS_SAVE" -> new Card("DIAGNOSIS_CONFIRM", "确认保存诊断记录", payload);
+            case "SUBJECT_CREATE" -> new Card("SUBJECT_CONFIRM", "确认创建护理档案", payload);
+            case "CARE_RECORD_SAVE" -> new Card("CARE_RECORD_CONFIRM", "确认保存护理记录", payload);
             default -> new Card("ACTION_CONFIRM", "确认护理操作", payload);
         };
     }

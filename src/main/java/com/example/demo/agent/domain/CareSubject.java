@@ -76,6 +76,6 @@ public class CareSubject {
     }
 
     public enum SourceType {
-        CARE_TARGET, PET_PROFILE, PLANT_PROFILE
+        CARE_TARGET, PET_PROFILE, PLANT_PROFILE, AGENT
     }
 }

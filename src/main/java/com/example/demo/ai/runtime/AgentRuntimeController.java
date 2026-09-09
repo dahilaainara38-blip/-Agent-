@@ -5,13 +5,17 @@ import com.example.demo.agent.domain.CareSubject;
 import com.example.demo.agent.service.ActionConfirmationService;
 import com.example.demo.agent.service.AgentConversationService;
 import com.example.demo.agent.service.ArtifactService;
+import com.example.demo.agent.service.CareEventRecorder;
+import com.example.demo.agent.service.SubjectDirectoryService;
 import com.example.demo.ai.ToolBroker;
+import com.example.demo.care.service.CareRecordService;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -35,17 +39,26 @@ public class AgentRuntimeController {
     private final ActionConfirmationService confirmationService;
     private final ToolBroker toolBroker;
     private final AgentConversationService conversationService;
+    private final SubjectDirectoryService subjectDirectory;
+    private final CareRecordService careRecordService;
+    private final CareEventRecorder careEventRecorder;
 
     public AgentRuntimeController(AgentRuntimeService agentRuntimeService,
                                   ArtifactService artifactService,
                                   ActionConfirmationService confirmationService,
                                   ToolBroker toolBroker,
-                                  AgentConversationService conversationService) {
+                                  AgentConversationService conversationService,
+                                  SubjectDirectoryService subjectDirectory,
+                                  CareRecordService careRecordService,
+                                  CareEventRecorder careEventRecorder) {
         this.agentRuntimeService = agentRuntimeService;
         this.artifactService = artifactService;
         this.confirmationService = confirmationService;
         this.toolBroker = toolBroker;
         this.conversationService = conversationService;
+        this.subjectDirectory = subjectDirectory;
+        this.careRecordService = careRecordService;
+        this.careEventRecorder = careEventRecorder;
     }
 
     @PostMapping("/messages")
@@ -58,6 +71,51 @@ public class AgentRuntimeController {
     public ResponseEntity<List<Map<String, Object>>> subjects(HttpSession session) {
         return ResponseEntity.ok(agentRuntimeService.subjects(session).stream()
                 .map(this::subjectItem)
+                .toList());
+    }
+
+    @PostMapping("/subjects")
+    public ResponseEntity<Map<String, Object>> createSubject(@RequestBody Map<String, String> body,
+                                                             HttpSession session) {
+        String userId = currentUser(session);
+        CareSubject subject = subjectDirectory.create(userId,
+                body.get("subjectType"), body.get("name"),
+                body.get("species"), body.get("breed"), body.get("profile"));
+        careEventRecorder.record(userId, subject.getSubjectType().name(), subject.getId(),
+                "SUBJECT_CREATE",
+                Map.of("name", subject.getName(),
+                        "species", subject.getSpecies() == null ? "" : subject.getSpecies()),
+                "REST", "rest_subject_create_" + subject.getId());
+        return ResponseEntity.ok(subjectItem(subject));
+    }
+
+    @DeleteMapping("/subjects/{id}")
+    public ResponseEntity<Map<String, Object>> deleteSubject(@PathVariable Long id, HttpSession session) {
+        String userId = currentUser(session);
+        CareSubject subject = subjectDirectory.softDelete(userId, id);
+        careEventRecorder.record(userId, subject.getSubjectType().name(), subject.getId(),
+                "SUBJECT_DELETE", Map.of("name", subject.getName()),
+                "REST", "rest_subject_delete_" + subject.getId());
+        return ResponseEntity.ok(Map.of("deleted", true));
+    }
+
+    @GetMapping("/subjects/{id}/records")
+    public ResponseEntity<List<Map<String, Object>>> subjectRecords(@PathVariable Long id,
+                                                                    HttpSession session) {
+        String userId = currentUser(session);
+        SubjectDirectoryService.ResolvedSubject resolved = subjectDirectory
+                .resolve(userId, null, id)
+                .orElseThrow(() -> new IllegalArgumentException("档案不存在或不属于当前用户"));
+        return ResponseEntity.ok(careRecordService
+                .getRecordsByTarget(userId, resolved.effectiveSubjectId()).stream()
+                .limit(20)
+                .map(record -> Map.<String, Object>of(
+                        "id", record.getId(),
+                        "recordType", record.getRecordType().name(),
+                        "title", record.getTitle() == null ? "" : record.getTitle(),
+                        "content", record.getContent() == null ? "" : record.getContent(),
+                        "createdAt", record.getCreatedAt() == null ? "" : record.getCreatedAt().toString()
+                ))
                 .toList());
     }
 

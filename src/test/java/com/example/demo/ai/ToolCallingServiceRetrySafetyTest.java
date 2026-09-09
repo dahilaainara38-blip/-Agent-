@@ -121,6 +121,7 @@ class ToolCallingServiceRetrySafetyTest {
         );
         ToolBroker toolBroker = new ToolBroker(
                 tools,
+                mock(com.example.demo.ai.AgentCareTools.class),
                 weatherService,
                 mock(ToolTraceRepository.class),
                 mock(ActionConfirmationRepository.class),

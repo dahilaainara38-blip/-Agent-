@@ -87,6 +87,49 @@ public class SubjectDirectoryService {
                 .build();
     }
 
+    @Transactional
+    public CareSubject create(String userId, String subjectType, String name,
+                              String species, String breed, String profile) {
+        CareSubject.SubjectType type = parseType(subjectType);
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("档案名称不能为空");
+        }
+        return subjectRepository.save(CareSubject.builder()
+                .userId(userId)
+                .subjectType(type)
+                .name(name.trim())
+                .species(blankToNull(species))
+                .breed(blankToNull(breed))
+                .profile(blankToNull(profile))
+                .sourceType(CareSubject.SourceType.AGENT)
+                .active(true)
+                .build());
+    }
+
+    /** 软删 agent 侧档案视图。注意：全部 CARE_TARGET 派生档案被删空后，下次访问会从 CareTarget 重新归一化。 */
+    @Transactional
+    public CareSubject softDelete(String userId, Long subjectId) {
+        CareSubject subject = subjectRepository.findByIdAndUserId(subjectId, userId)
+                .orElseThrow(() -> new IllegalArgumentException("档案不存在或不属于当前用户"));
+        subject.setActive(false);
+        return subjectRepository.save(subject);
+    }
+
+    private CareSubject.SubjectType parseType(String subjectType) {
+        if (subjectType == null || subjectType.isBlank()) {
+            throw new IllegalArgumentException("档案类型不能为空");
+        }
+        try {
+            return CareSubject.SubjectType.valueOf(subjectType.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("档案类型仅支持 PET 或 PLANT");
+        }
+    }
+
+    private String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
     public record ResolvedSubject(CareSubject subject, Long effectiveSubjectId) {
     }
 }

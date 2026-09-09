@@ -45,7 +45,7 @@ class AgentRuntimeControllerIntegrationTest {
     void toolCatalogExposesAllBrokeredTools() throws Exception {
         mockMvc.perform(get("/api/agent/tools"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(23));
+                .andExpect(jsonPath("$.length()").value(25));
     }
 
     @Test
@@ -98,6 +98,33 @@ class AgentRuntimeControllerIntegrationTest {
         mockMvc.perform(get("/api/agent/conversations/agent_other/messages").session(session))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
+    void subjectLifecycleCreatesOwnedSubjectAndRejectsForeignDelete() throws Exception {
+        mockMvc.perform(post("/api/agent/subjects").contentType("application/json")
+                        .content("{\"subjectType\":\"PET\",\"name\":\"小橘\"}"))
+                .andExpect(status().isUnauthorized());
+
+        MockHttpSession session = authenticated();
+        MvcResult created = mockMvc.perform(post("/api/agent/subjects").session(session)
+                        .contentType("application/json")
+                        .content("{\"subjectType\":\"PET\",\"name\":\"小橘\",\"species\":\"橘猫\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("小橘"))
+                .andReturn();
+        assertTrue(created.getResponse().getContentAsString().contains("PET"));
+
+        String body = created.getResponse().getContentAsString();
+        String subjectId = body.replaceAll(".*\"id\":(\\d+).*", "$1");
+        mockMvc.perform(get("/api/agent/subjects/" + subjectId + "/records").session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+
+        // 不存在的档案：不泄露任何信息
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                        .delete("/api/agent/subjects/999999").session(session))
+                .andExpect(status().isBadRequest());
     }
 
     private MockHttpSession authenticated() {
