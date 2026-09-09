@@ -1023,10 +1023,10 @@ async function loadStats() {
     }
 
     try {
-        const pr = await fetch('/api/ai/care/reminders/pending');
+        const pr = await fetch('/api/care/reminders/pending');
         const pj = await pr.json();
-        if (pj.success) {
-            document.getElementById('pendingCount').textContent = pj.count;
+        if (pj.code === 200 && pj.data) {
+            document.getElementById('pendingCount').textContent = pj.data.count;
         }
     } catch (e) {
         document.getElementById('pendingCount').textContent = '-';
@@ -1035,7 +1035,7 @@ async function loadStats() {
 
 // Navigation
 function selectSystem(type) {
-    location.href = type === 'petplant' ? '/care' : '/chat';
+    location.href = type === 'petplant' ? '/care' : '/agent';
 }
 
 function logout() {

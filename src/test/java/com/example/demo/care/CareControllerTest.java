@@ -1,12 +1,10 @@
 package com.example.demo.care;
 
 import com.example.demo.agent.service.CareEventRecorder;
-import com.example.demo.ai.runtime.CareQaCompatibilityService;
 import com.example.demo.chat.entity.CareRecord;
 import com.example.demo.chat.repository.mysql.LegacyCareRecordRepository;
 import com.example.demo.chat.repository.mysql.PlantProfileRepository;
 import com.example.demo.chat.repository.mysql.PetProfileRepository;
-import com.example.demo.chat.LlmService;
 import com.example.demo.vision.VisionService;
 import jakarta.servlet.http.HttpSession;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,11 +35,10 @@ class CareControllerTest {
         careEventRecorder = mock(CareEventRecorder.class);
         controller = new CareController(
                 mock(VisionService.class),
-                mock(LlmService.class),
                 mock(PlantProfileRepository.class),
                 mock(PetProfileRepository.class),
                 careRecordRepository,
-                mock(CareQaCompatibilityService.class),
+                mock(com.example.demo.care.service.CareReminderService.class),
                 careEventRecorder
         );
         session = mock(HttpSession.class);

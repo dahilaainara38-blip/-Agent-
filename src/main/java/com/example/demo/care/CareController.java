@@ -2,14 +2,13 @@ package com.example.demo.care;
 
 import com.example.demo.agent.service.CareEventRecorder;
 import com.example.demo.aicare.Result;
-import com.example.demo.ai.runtime.CareQaCompatibilityService;
 import com.example.demo.chat.entity.CareRecord;
 import com.example.demo.chat.entity.PlantProfile;
 import com.example.demo.chat.entity.PetProfile;
 import com.example.demo.chat.repository.mysql.LegacyCareRecordRepository;
 import com.example.demo.chat.repository.mysql.PlantProfileRepository;
 import com.example.demo.chat.repository.mysql.PetProfileRepository;
-import com.example.demo.chat.LlmService;
+import com.example.demo.care.service.CareReminderService;
 import com.example.demo.vision.VisionService;
 import jakarta.servlet.http.HttpSession;
 import org.slf4j.Logger;
@@ -26,25 +25,23 @@ public class CareController {
     private static final Logger logger = LoggerFactory.getLogger(CareController.class);
 
     private final VisionService visionService;
-    private final LlmService llmService;
     private final PlantProfileRepository plantProfileRepository;
     private final PetProfileRepository petProfileRepository;
     private final LegacyCareRecordRepository careRecordRepository;
-    private final CareQaCompatibilityService careQaCompatibilityService;
+    private final CareReminderService careReminderService;
     private final CareEventRecorder careEventRecorder;
 
-    public CareController(VisionService visionService, LlmService llmService,
+    public CareController(VisionService visionService,
                           PlantProfileRepository plantProfileRepository,
                           PetProfileRepository petProfileRepository,
                           LegacyCareRecordRepository careRecordRepository,
-                          CareQaCompatibilityService careQaCompatibilityService,
+                          CareReminderService careReminderService,
                           CareEventRecorder careEventRecorder) {
         this.visionService = visionService;
-        this.llmService = llmService;
         this.plantProfileRepository = plantProfileRepository;
         this.petProfileRepository = petProfileRepository;
         this.careRecordRepository = careRecordRepository;
-        this.careQaCompatibilityService = careQaCompatibilityService;
+        this.careReminderService = careReminderService;
         this.careEventRecorder = careEventRecorder;
     }
 
@@ -212,44 +209,15 @@ public class CareController {
                 "REST", "rest_target_create_" + subjectType.toLowerCase() + "_" + targetId);
     }
 
-    @PostMapping("/qa")
-    public Result<Map<String, Object>> qa(@RequestBody Map<String, Object> params, HttpSession session) {
-        logger.info("Care QA request: {}, targetType: {}, targetId: {}, hasImage: {}",
-                params.get("question"), params.get("targetType"), params.get("targetId"), params.get("image") != null);
-
-        try {
-            return Result.success(careQaCompatibilityService.qa(params, session));
-        } catch (Exception e) {
-            logger.error("Care QA failed", e);
-            return Result.error("问答失败：" + e.getMessage());
-        }
-    }
-
-    @PostMapping("/qa/summary")
-    public Result<Map<String, Object>> qaSummary(@RequestBody Map<String, Object> params,
-                                                 HttpSession session) {
+    /**
+     * 待办提醒计数（首页数据卡）。旧 /api/ai/* 前缀端点已随 AiController 下线。
+     */
+    @GetMapping("/reminders/pending")
+    public Result<Map<String, Object>> pendingReminders(HttpSession session) {
         String user = currentUser(session);
         if (user == null) {
             return Result.error("未登录");
         }
-        String reply = (String) params.get("reply");
-        String targetType = (String) params.get("targetType");
-        String targetName = (String) params.get("targetName");
-
-        logger.info("Care QA summary request, targetType: {}, targetName: {}", targetType, targetName);
-
-        try {
-            String prompt = "请将以下护理建议压缩成3-5句话，科学地总结护理记录要点和下一步护理建议：\n\n" + reply;
-            
-            String summary = llmService.chat(prompt, "你是一位专业的" + ("PLANT".equalsIgnoreCase(targetType) ? "植物" : "宠物") + "护理专家，请用简洁、科学的语言总结护理建议。");
-            
-            Map<String, Object> result = new HashMap<>();
-            result.put("summary", summary);
-            
-            return Result.success(result);
-        } catch (IOException e) {
-            logger.error("Care QA summary failed", e);
-            return Result.error("生成摘要失败：" + e.getMessage());
-        }
+        return Result.success(Map.of("count", careReminderService.countPendingReminders(user)));
     }
 }

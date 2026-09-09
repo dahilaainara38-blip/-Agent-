@@ -26,9 +26,10 @@ public class PageController {
         return "forward:/care.html";
     }
 
+    /** 旧聊天页已并入 Agent 工作台，保留重定向照顾历史入口。 */
     @GetMapping("/chat")
     public String chat() {
-        return "forward:/chat.html";
+        return "redirect:/agent";
     }
 
     @GetMapping("/agent")

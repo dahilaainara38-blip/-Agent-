@@ -52,20 +52,9 @@
             </div>
         </section>
         <section class="panel">
-            <h3>专属护理问答</h3>
-            <p class="muted">每次提问都会调用 AI 专业助手，结合你的档案和最近护理记录回答。</p>
-            <select id="targetSelect" style="width:100%;margin-bottom:10px;" onchange="onTargetChange()">
-                <option value="">选择一个档案（可选）</option>
-            </select>
-            <div class="qa-row"><textarea id="question" rows="3" placeholder="例如：我的绿萝叶子发黄，结合最近浇水记录该怎么办？"></textarea><button class="primary" onclick="askAI()">提问</button></div>
-            <div id="qaResult" class="result" style="display:none;margin-top:14px"></div>
-            <div id="qaSummary" class="result" style="display:none;margin-top:14px;border-left-color:#f90;">
-                <div style="font-weight:bold;margin-bottom:8px;color:#8b6914;">📋 护理摘要</div>
-                <div id="summaryText"></div>
-            </div>
-            <div id="summaryBtnContainer" style="display:none;margin-top:10px;text-align:right;">
-                <button class="minor" onclick="generateSummary()">生成护理摘要</button>
-            </div>
+            <h3>AI 护理问答</h3>
+            <p class="muted">问答已升级到 Agent 工作台：多轮对话、图片识别、诊断建档、护理记录与确认执行，历史会话随时回看。</p>
+            <div class="qa-row"><button class="primary" onclick="location.href='/agent'">进入 Agent 工作台 →</button></div>
         </section>
     </div>
     <section class="panel" style="margin-top:22px">
@@ -75,7 +64,7 @@
 </main>
 <div id="toast"></div>
 <script>
-let type='PLANT', imageData='', diagnosis='', lastReply='', lastTargetName='';
+let type='PLANT', imageData='', diagnosis='';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 fetch('/api/auth/me').then(r=>r.json()).then(x=>{if(x.code!==200)location.href='/login';else userName.textContent=x.data.userName});
 function toast(s){const e=document.getElementById('toast');e.textContent=s;e.style.display='block';setTimeout(()=>e.style.display='none',2600)}
@@ -83,15 +72,11 @@ function switchType(t){type=t;plantTab.classList.toggle('active',t==='PLANT');pe
 function recognize(file){if(!file)return;const reader=new FileReader();reader.onload=async e=>{imageData=e.target.result;uploadBox.classList.add('loading');try{const r=await fetch('/api/care/identify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type,image:imageData.split(',')[1]})});if(!r.ok)throw Error('识别失败');const x=await r.json();diagnosis=x.data.result;resultText.textContent=diagnosis;emptyResult.style.display='none';aiResult.style.display='block';species.value=extractSpecies(diagnosis)}catch(e){toast(e.message)}finally{uploadBox.classList.remove('loading')}};reader.readAsDataURL(file)}
 function extractSpecies(s){const m=s.match(/(?:品种|物种|名称)[：:]\s*([^\n，。]+)/);return m?m[1].replace(/\*\*/g,'').trim():''}
 async function saveTarget(){if(!targetName.value.trim())return toast('请填写档案名称');const body={name:targetName.value.trim(),species:species.value.trim(),breed:breed.value.trim(),imageUrl:imageData?'data:image/uploaded':''};const r=await fetch('/api/care/targets/'+type,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)return toast('保存失败');targetName.value='';toast('档案已保存');loadTargets()}
-async function loadTargets(){const r=await fetch('/api/care/targets/'+type);if(r.status===401)return location.href='/login';const x=await r.json();const rows=x.data;targets.innerHTML=rows.length?rows.map(cardHtml).join(''):'<div class="muted">还没有档案，上传照片识别或直接创建一个吧。</div>';updateTargetSelect(rows)}
+async function loadTargets(){const r=await fetch('/api/care/targets/'+type);if(r.status===401)return location.href='/login';const x=await r.json();const rows=x.data;targets.innerHTML=rows.length?rows.map(cardHtml).join(''):'<div class="muted">还没有档案，上传照片识别或直接创建一个吧。</div>'}
 function cardHtml(x){return `<article class="card"><h4>${type==='PLANT'?'🌱':'🐾'} ${esc(x.name)}</h4><div class="muted">${esc(x.species||'未填写品种')}${x.breed?' · '+esc(x.breed):''}</div><div class="actions"><button class="minor" onclick="showRecords(${x.id},this)">护理记录</button><button class="minor" onclick="addRecord(${x.id})">新增记录</button><button class="danger" onclick="removeTarget(${x.id})">删除</button></div><div class="records" id="records-${x.id}" style="display:none"></div></article>`}
 async function showRecords(id,btn){const box=document.getElementById('records-'+id);if(box.style.display!=='none'){box.style.display='none';return}const r=await fetch(`/api/care/records/${type}/${id}`);const x=await r.json();const rows=x.data;box.innerHTML=rows.length?rows.map(x=>`<div class="record"><b>${esc(x.recordType||'护理')}</b> · ${esc(x.content||'')}<div class="muted">${esc(x.createdAt||'')}</div></div>`).join(''):'<div class="muted">暂无护理记录</div>';box.style.display='block'}
 async function addRecord(id){const recordType=prompt(type==='PLANT'?'记录类型：浇水/施肥/修剪/换盆':'记录类型：喂养/洗护/驱虫/疫苗/就医');if(!recordType)return;const content=prompt('记录详情');if(content===null)return;await fetch('/api/care/records',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({targetType:type,targetId:id,recordType,content})});toast('护理记录已保存');const box=document.getElementById('records-'+id);box.style.display='none';showRecords(id)}
 async function removeTarget(id){if(!confirm('确定删除档案及其护理记录？'))return;await fetch(`/api/care/targets/${type}/${id}`,{method:'DELETE'});loadTargets()}
-function updateTargetSelect(rows){const sel=document.getElementById('targetSelect');sel.innerHTML='<option value="">选择一个档案（可选）</option>';rows.forEach(x=>{const opt=document.createElement('option');opt.value=x.id;opt.textContent=x.name+(x.species?' - '+x.species:'');sel.appendChild(opt)});qaSummary.style.display='none';summaryBtnContainer.style.display='none'}
-function onTargetChange(){qaSummary.style.display='none';summaryBtnContainer.style.display='none'}
-async function askAI(){const q=question.value.trim();if(!q)return toast('请输入护理问题');qaResult.style.display='block';qaResult.textContent='AI正在分析中…';qaSummary.style.display='none';summaryBtnContainer.style.display='none';const targetSelect=document.getElementById('targetSelect');const targetId=targetSelect.value?parseInt(targetSelect.value):null;const r=await fetch('/api/care/qa',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:q,targetType:type,targetId:targetId})});const x=await r.json();qaResult.textContent=x.data.reply||'暂时无法回答';lastReply=x.data.reply||'';lastTargetName=x.data.targetName||'';if(lastReply){summaryBtnContainer.style.display='block';qaSummary.style.display='none'}}
-async function generateSummary(){if(!lastReply)return toast('请先提问获取护理建议');qaSummary.style.display='block';summaryText.textContent='AI正在生成摘要…';const r=await fetch('/api/care/qa/summary',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({reply:lastReply,targetType:type,targetName:lastTargetName})});const x=await r.json();summaryText.textContent=x.data.summary||'无法生成摘要'}
 async function logout(){await fetch('/api/auth/logout',{method:'POST'});location.href='/login'}
 loadTargets();
 </script>
