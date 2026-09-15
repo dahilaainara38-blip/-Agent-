@@ -993,7 +993,14 @@ async function loadTargets(type) {
     }
     const data = await res.json();
     // agent 域返回带归属的档案；sourceId 即工具/时间线使用的目标 ID
-    currentTargets = (data || []).filter(t => t.type === type);
+    // runtime 关闭/异常时端点返回错误对象，需防御非数组响应
+    if (!Array.isArray(data)) {
+        showToast('档案加载失败，请稍后重试', 'error');
+        currentTargets = [];
+        renderTargetSelector();
+        return;
+    }
+    currentTargets = data.filter(t => t.type === type);
     renderTargetSelector();
 }
 

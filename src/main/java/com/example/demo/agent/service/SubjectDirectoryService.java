@@ -106,12 +106,20 @@ public class SubjectDirectoryService {
                 .build());
     }
 
-    /** 软删 agent 侧档案视图。注意：全部 CARE_TARGET 派生档案被删空后，下次访问会从 CareTarget 重新归一化。 */
+    /**
+     * 软删 agent 侧档案视图；CARE_TARGET 派生的档案同时删除其源行，
+     * 否则最后一条 active 视图被删空后 subjects() 会从 CareTarget 重新归一化导致"复活"。
+     */
     @Transactional
     public CareSubject softDelete(String userId, Long subjectId) {
         CareSubject subject = subjectRepository.findByIdAndUserId(subjectId, userId)
                 .orElseThrow(() -> new IllegalArgumentException("档案不存在或不属于当前用户"));
         subject.setActive(false);
+        if (subject.getSourceType() == CareSubject.SourceType.CARE_TARGET
+                && subject.getSourceId() != null) {
+            careTargetRepository.findById(subject.getSourceId())
+                    .ifPresent(target -> careTargetRepository.delete(target));
+        }
         return subjectRepository.save(subject);
     }
 

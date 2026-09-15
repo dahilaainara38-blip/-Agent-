@@ -392,9 +392,16 @@ public class SpringAiTools {
         }
 
         try {
+            String pendingBase64 = context.artifactId() != null && !context.artifactId().isBlank()
+                    ? null
+                    : userSessionService.getPendingImageBase64(userId);
+            if ((context.artifactId() == null || context.artifactId().isBlank())
+                    && (pendingBase64 == null || pendingBase64.isBlank())) {
+                return "请先上传一张植物叶子或宠物皮肤照片，我再进行诊断。";
+            }
             byte[] imageBytes = context.artifactId() != null && !context.artifactId().isBlank()
                     ? artifactService.readOwnedBytes(context.artifactId(), userId)
-                    : Base64.getDecoder().decode(userSessionService.getPendingImageBase64(userId));
+                    : Base64.getDecoder().decode(pendingBase64);
             DiseaseResult result = diseaseRecognitionService.diagnose(imageBytes, type, userId);
 
             StringBuilder sb = new StringBuilder();

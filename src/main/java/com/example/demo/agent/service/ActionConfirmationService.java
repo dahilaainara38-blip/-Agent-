@@ -54,8 +54,11 @@ public class ActionConfirmationService {
 
         ActionConfirmation claimedRow = owned(id, userId);
         JSONObject arguments = JSON.parseObject(claimedRow.getPayloadJson());
+        // 各工具的参数命名不统一：护理类用 targetType，诊断类用 type
         String subjectType = arguments.containsKey("targetType")
                 ? String.valueOf(arguments.get("targetType")).toUpperCase()
+                : arguments.containsKey("type")
+                ? String.valueOf(arguments.get("type")).equalsIgnoreCase("plant") ? "PLANT" : "PET"
                 : null;
         AgentContext context = new AgentContext(
                 claimedRow.getUserId(),
@@ -194,7 +197,9 @@ public class ActionConfirmationService {
             return null;
         }
         try {
-            return Long.valueOf(marker.substring(start + 15, end));
+            // "[CONFIRMATION:" 共 14 个字符；此前误用 start+15 会吃掉第一位数字，
+            // 单位数 ID 解析为空、多位数 ID 解析错位（存量 bug）
+            return Long.valueOf(marker.substring(start + 14, end));
         } catch (NumberFormatException e) {
             return null;
         }

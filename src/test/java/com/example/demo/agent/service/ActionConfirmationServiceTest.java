@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -158,6 +159,21 @@ class ActionConfirmationServiceTest {
 
         assertTrue(error.getMessage().contains("执行失败"));
         verify(toolBroker, never()).execute(any(), any(), any(), any());
+    }
+
+    @Test
+    void confirmationIdParsesSingleAndMultiDigitIds() {
+        // 回归：此前 off-by-one 会导致单位数 ID 解析为空（无确认卡）、多位数错位
+        assertEquals(9L, service.confirmationId("[CONFIRMATION:9] 该操作需要确认后才会执行。"));
+        assertEquals(42L, service.confirmationId("[CONFIRMATION:42] 该操作需要确认后才会执行。"));
+        assertEquals(107L, service.confirmationId("前文 [CONFIRMATION:107] 后文"));
+    }
+
+    @Test
+    void confirmationIdReturnsNullForMissingOrBrokenMarkers() {
+        assertNull(service.confirmationId("没有标记"));
+        assertNull(service.confirmationId("[CONFIRMATION:abc]"));
+        assertNull(service.confirmationId("[CONFIRMATION:"));
     }
 
     private ActionConfirmation pending() {

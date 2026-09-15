@@ -995,14 +995,16 @@ document.getElementById('todayDate').textContent = new Date().toLocaleDateString
 // Load quick stats
 async function loadStats() {
     try {
-        const [plantRes, petRes] = await Promise.all([
-            fetch('/api/care/targets/PLANT'),
-            fetch('/api/care/targets/PET')
-        ]);
-        const p = await plantRes.json();
-        const d = await petRes.json();
-        if (p.code === 200) document.getElementById('plantCount').textContent = (p.data || []).length;
-        if (d.code === 200) document.getElementById('petCount').textContent = (d.data || []).length;
+        const subjectsRes = await fetch('/api/agent/subjects');
+        if (subjectsRes.ok) {
+            const subjects = await subjectsRes.json();
+            if (Array.isArray(subjects)) {
+                document.getElementById('plantCount').textContent =
+                    subjects.filter(s => s.type === 'PLANT').length;
+                document.getElementById('petCount').textContent =
+                    subjects.filter(s => s.type === 'PET').length;
+            }
+        }
     } catch (e) {}
 
     try {
