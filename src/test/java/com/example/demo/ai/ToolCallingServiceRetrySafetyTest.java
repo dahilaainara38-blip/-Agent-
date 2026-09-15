@@ -51,7 +51,7 @@ class ToolCallingServiceRetrySafetyTest {
         ToolCallingService service = service(llmService, weatherService, 2000, 100);
 
         ToolCallResponse response = service.chatWithMessages(
-                new JSONArray(), Set.of("queryWeather"), AgentContext.anonymous());
+                new JSONArray(), Set.of("getWeather"), AgentContext.anonymous());
 
         assertEquals("今天北京晴", response.getText());
         assertEquals(1, response.getToolCallHistory().size());
@@ -72,7 +72,7 @@ class ToolCallingServiceRetrySafetyTest {
         ToolCallingService service = service(llmService, weatherService, 2000, 10_000);
 
         ToolCallResponse response = service.chatWithMessages(
-                new JSONArray(), Set.of("queryWeather"), AgentContext.anonymous());
+                new JSONArray(), Set.of("getWeather"), AgentContext.anonymous());
 
         assertTrue(response.getText().contains("处理请求时发生错误"));
         assertTrue(response.getText().contains("LLM 暂时不可用"));
@@ -93,7 +93,7 @@ class ToolCallingServiceRetrySafetyTest {
         ToolCallingService service = service(llmService, weatherService, 2000, 10_000);
 
         ToolCallResponse response = service.chatWithMessages(
-                new JSONArray(), Set.of("queryWeather"), AgentContext.anonymous());
+                new JSONArray(), Set.of("getWeather"), AgentContext.anonymous());
 
         assertEquals("已恢复", response.getText());
         assertEquals(2, response.getTotalIterations());
@@ -102,7 +102,7 @@ class ToolCallingServiceRetrySafetyTest {
     private ToolCallingService service(LlmService llmService, WeatherService weatherService,
                                        long brokerTimeoutMs, long waitTimeoutMs) {
         SpringAiTools tools = new SpringAiTools(
-                mock(WeatherService.class),
+                weatherService,
                 mock(WebSearchTool.class),
                 mock(ImageAnalysisTool.class),
                 mock(ImageGenerationTool.class),
@@ -122,7 +122,6 @@ class ToolCallingServiceRetrySafetyTest {
         ToolBroker toolBroker = new ToolBroker(
                 tools,
                 mock(com.example.demo.ai.AgentCareTools.class),
-                weatherService,
                 mock(ToolTraceRepository.class),
                 mock(ActionConfirmationRepository.class),
                 brokerTimeoutMs,
@@ -133,7 +132,7 @@ class ToolCallingServiceRetrySafetyTest {
 
     private JSONObject toolCallResponse() {
         JSONObject function = new JSONObject();
-        function.put("name", "queryWeather");
+        function.put("name", "getWeather");
         function.put("arguments", "{\"city\":\"北京\"}");
 
         JSONObject call = new JSONObject();

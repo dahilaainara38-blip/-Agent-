@@ -89,7 +89,7 @@ class ToolCallingServiceStreamTest {
 
     private ToolCallingService service(LlmService llmService, WeatherService weatherService) {
         SpringAiTools tools = new SpringAiTools(
-                mock(WeatherService.class),
+                weatherService,
                 mock(WebSearchTool.class),
                 mock(ImageAnalysisTool.class),
                 mock(ImageGenerationTool.class),
@@ -109,7 +109,6 @@ class ToolCallingServiceStreamTest {
         ToolBroker toolBroker = new ToolBroker(
                 tools,
                 mock(AgentCareTools.class),
-                weatherService,
                 mock(ToolTraceRepository.class),
                 mock(ActionConfirmationRepository.class),
                 2000,

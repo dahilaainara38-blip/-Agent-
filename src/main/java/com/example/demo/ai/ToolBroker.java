@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.lang.reflect.InvocationTargetException;
@@ -74,7 +75,6 @@ public class ToolBroker {
 
     public ToolBroker(SpringAiTools springAiTools,
                       AgentCareTools agentCareTools,
-                      WeatherService weatherService,
                       ToolTraceRepository toolTraceRepository,
                       ActionConfirmationRepository confirmationRepository,
                       @Value("${agent.tools.timeout-ms:8000}") long timeoutMs,
@@ -92,7 +92,6 @@ public class ToolBroker {
                 });
         register(springAiTools);
         register(agentCareTools);
-        register(weatherService);
         log.info("ToolBroker initialized with {} tools", toolRegistry.size());
     }
 
@@ -259,6 +258,19 @@ public class ToolBroker {
     }
 
     /** 滑动窗口限流：任意 60 秒内同一用户最多 userCallsPerMinute 次工具调用，0 表示关闭。 */
+    /** 定期淘汰完全过期的限流窗口，防止 userCallLog 随历史用户数无界增长。 */
+    @Scheduled(fixedDelay = 300_000, initialDelay = 300_000)
+    public void evictIdleRateLimitWindows() {
+        long cutoff = System.currentTimeMillis() - 60_000;
+        userCallLog.entrySet().removeIf(entry -> {
+            Deque<Long> calls = entry.getValue();
+            synchronized (calls) {
+                calls.removeIf(timestamp -> timestamp <= cutoff);
+                return calls.isEmpty();
+            }
+        });
+    }
+
     private void checkRateLimit(String toolName, JSONObject arguments, String traceId, AgentContext context) {
         if (userCallsPerMinute <= 0 || context.userId() == null || context.userId().isBlank()) {
             return;

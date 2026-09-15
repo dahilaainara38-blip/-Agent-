@@ -78,7 +78,6 @@ class ToolBrokerRateLimitTest {
         return new ToolBroker(
                 tools,
                 mock(com.example.demo.ai.AgentCareTools.class),
-                mock(WeatherService.class),
                 mock(ToolTraceRepository.class),
                 mock(ActionConfirmationRepository.class),
                 1000,

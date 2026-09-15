@@ -68,7 +68,6 @@ class ToolCallingServiceAgentContextTest {
         ToolBroker toolBroker = new ToolBroker(
                 tools,
                 mock(com.example.demo.ai.AgentCareTools.class),
-                mock(WeatherService.class),
                 mock(ToolTraceRepository.class),
                 confirmationRepository,
                 1000,
@@ -95,7 +94,7 @@ class ToolCallingServiceAgentContextTest {
 
     @Test
     void brokerRegistersAllLegacyTools() {
-        assertEquals(26, toolCallingService.getRegisteredToolNames().size());
+        assertEquals(25, toolCallingService.getRegisteredToolNames().size());
     }
 
     @Test

@@ -46,6 +46,12 @@ public class AgentRuntimeController {
     private final SubjectDirectoryService subjectDirectory;
     private final CareRecordService careRecordService;
     private final CareEventRecorder careEventRecorder;
+    private final java.util.concurrent.ExecutorService streamExecutor =
+            java.util.concurrent.Executors.newFixedThreadPool(8, task -> {
+                Thread thread = new Thread(task, "agent-sse");
+                thread.setDaemon(true);
+                return thread;
+            });
 
     public AgentRuntimeController(AgentRuntimeService agentRuntimeService,
                                   ArtifactService artifactService,
@@ -76,13 +82,15 @@ public class AgentRuntimeController {
      * phase（thinking/tools 阶段变化）、delta（回复文本增量，打字机直出）、
      * tool（单个工具执行结果）、done（完整 AgentChatResponse）、error。
      * 鉴权在请求线程同步完成；同步端点 /api/agent/messages 保留为回滚路径。
+     * 有界线程池承载流式任务，超载请求排队由 emitter 超时兜底。
      */
     @PostMapping("/messages/stream")
     public SseEmitter messageStream(@RequestBody AgentChatRequest request, HttpSession session) {
         String userId = currentUser(session);
         SseEmitter emitter = new SseEmitter(180_000L);
+        emitter.onTimeout(emitter::complete);
 
-        Thread worker = new Thread(() -> {
+        streamExecutor.submit(() -> {
             try {
                 AgentChatResponse response = agentRuntimeService.chat(request, session,
                         new ToolCallingService.StreamListener() {
@@ -121,9 +129,7 @@ public class AgentRuntimeController {
                 }
                 emitter.complete();
             }
-        }, "agent-sse-" + userId);
-        worker.setDaemon(true);
-        worker.start();
+        });
         return emitter;
     }
 
@@ -315,6 +321,19 @@ public class AgentRuntimeController {
     public ResponseEntity<ActionConfirmationService.ConfirmationOutcome> cancel(
             @PathVariable Long id, HttpSession session) {
         return ResponseEntity.ok(confirmationService.cancel(id, currentUser(session)));
+    }
+
+    @jakarta.annotation.PreDestroy
+    public void shutdownStreamExecutor() {
+        streamExecutor.shutdown();
+        try {
+            if (!streamExecutor.awaitTermination(3, java.util.concurrent.TimeUnit.SECONDS)) {
+                streamExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            streamExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
     }
 
     private Map<String, Object> subjectItem(CareSubject subject) {
