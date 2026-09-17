@@ -3,7 +3,6 @@ package com.example.demo.agent.domain;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
@@ -34,8 +33,9 @@ public class AgentMessage {
     @Column(name = "role", nullable = false, length = 20)
     private String role;
 
-    @Lob
-    @Column(name = "content", nullable = false)
+    // 显式 TEXT：@Lob 在方言间映射不稳定，且 ddl-auto=update 不会迁移已有列类型，
+    // 已有库由 care_schema.sql 的 ALTER 兜底
+    @Column(name = "content", nullable = false, columnDefinition = "TEXT")
     private String content;
 
     @Column(name = "artifact_id", length = 80)

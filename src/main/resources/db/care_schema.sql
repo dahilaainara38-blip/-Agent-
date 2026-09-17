@@ -39,3 +39,7 @@ CREATE TABLE IF NOT EXISTS identify_history (
 -- 领域事件幂等：同一来源（如确认执行 confirmation_<id>）只允许一条 care_event。
 -- MySQL 不支持 CREATE INDEX IF NOT EXISTS：索引已存在或存量数据有重复时本语句报错并被初始化器跳过，属预期行为。
 CREATE UNIQUE INDEX idx_care_event_source_event ON care_event (source_event_id);
+
+-- agent_message.content 建表时被生成为 VARCHAR(255)，长回复会 Data truncation；
+-- ddl-auto=update 不迁移已有列类型，幂等 ALTER 兜底
+ALTER TABLE agent_message MODIFY COLUMN content TEXT NOT NULL;
