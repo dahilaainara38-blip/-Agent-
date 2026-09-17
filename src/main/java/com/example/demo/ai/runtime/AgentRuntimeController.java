@@ -38,6 +38,9 @@ import java.util.Map;
 @RequestMapping("/api/agent")
 public class AgentRuntimeController {
 
+    private static final org.slf4j.Logger STREAM_LOG =
+            org.slf4j.LoggerFactory.getLogger(AgentRuntimeController.class);
+
     private final AgentRuntimeService agentRuntimeService;
     private final ArtifactService artifactService;
     private final ActionConfirmationService confirmationService;
@@ -121,6 +124,8 @@ public class AgentRuntimeController {
                 send(emitter, "done", response);
                 emitter.complete();
             } catch (Exception e) {
+                // 记录根因：SSE 通道只回传用户可读消息，异常详情只在服务端日志
+                STREAM_LOG.error("Agent stream task failed", e);
                 try {
                     send(emitter, "error", Map.of("error",
                             e.getMessage() == null ? "Agent 处理失败" : e.getMessage()));

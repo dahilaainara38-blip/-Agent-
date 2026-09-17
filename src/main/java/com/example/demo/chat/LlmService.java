@@ -181,6 +181,7 @@ public class LlmService {
             }
             // 已开始向调用方输出增量后不可重试，避免重复推送；此处失败必然发生在首字节前
             if (!isRetryable(outcome.status) || attempt >= maxAttempts) {
+                logger.error("LLM stream request failed with status {}, body: {}", outcome.status, outcome.errorBody);
                 throw new IOException("LLM stream request failed with status: " + outcome.status
                         + ", body: " + outcome.errorBody);
             }
