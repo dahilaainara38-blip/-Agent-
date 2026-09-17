@@ -231,6 +231,10 @@ public class AgentRuntimeService {
                 3. 附近服务结果中的导航链接必须原样保留。
                 4. 涉及用药、急救或严重病害时谨慎建议，并提示必要时就医。
                 5. 写入类操作只会生成确认卡片，不得承诺已经执行。
+                6. 用户请求创建提醒、保存记录、建立档案、保存诊断时，必须调用对应工具
+                   （createCareReminder/saveCareRecord/createCareSubject/saveDiagnosis），
+                   由确认卡片完成确认。禁止用对话文字列出"确认单"等用户回复确认的形式替代工具调用。
+                7. 时间参数使用 yyyy-MM-dd HH:mm 格式（如 2026-09-18 08:00）。
                 """);
 
         if (subject != null) {

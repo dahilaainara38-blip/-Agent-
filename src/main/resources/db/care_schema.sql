@@ -43,3 +43,13 @@ CREATE UNIQUE INDEX idx_care_event_source_event ON care_event (source_event_id);
 -- agent_message.content 建表时被生成为 VARCHAR(255)，长回复会 Data truncation；
 -- ddl-auto=update 不迁移已有列类型，幂等 ALTER 兜底
 ALTER TABLE agent_message MODIFY COLUMN content TEXT NOT NULL;
+
+-- care_subject 建表时 Hibernate 为 source_type 生成了枚举 CHECK 约束，
+-- 新增 AGENT 枚举值后约束未随之更新（插入 agent 原生档案会违反约束），幂等删除兜底
+ALTER TABLE care_subject DROP CHECK care_subject_chk_1;
+
+-- care_records 历史上被两套命名策略先后加列，下划线组为死列（NOT NULL 无默认，
+-- 插入报 1364）。列已不存在时本语句报错被跳过，属预期。
+ALTER TABLE care_records
+  DROP COLUMN created_at, DROP COLUMN is_completed, DROP COLUMN record_type,
+  DROP COLUMN reminder_time, DROP COLUMN target_id, DROP COLUMN target_type, DROP COLUMN user_id;
